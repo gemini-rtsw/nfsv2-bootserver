@@ -1,0 +1,13 @@
+# VxWorks files directory
+vxworks-files/
+
+# Docker
+.dockerignore
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
