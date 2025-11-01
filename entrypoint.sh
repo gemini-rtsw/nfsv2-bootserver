@@ -1,17 +1,27 @@
 #!/bin/bash
 
-# Check if rpcbind is already running (host mode)
-if pgrep -x rpcbind > /dev/null 2>&1; then
-    echo "rpcbind already running (using host's rpcbind)"
-else
-    echo "Starting rpcbind..."
-    rpcbind -w &
-    sleep 2
-fi
+# Kill any existing rpcbind to ensure clean state
+pkill -9 rpcbind 2>/dev/null || true
+sleep 1
 
-# Simple wait for rpcbind
+# Remove old rpcbind state
+rm -f /var/run/rpcbind.sock /run/rpcbind.sock 2>/dev/null || true
+
+# Start rpcbind in foreground mode first, then background it
+echo "Starting rpcbind..."
+rpcbind -w -f &
+RPCBIND_PID=$!
+
+# Wait for rpcbind to be ready
 echo "Waiting for rpcbind to be ready..."
-sleep 2
+sleep 3
+
+# Verify rpcbind is accessible
+if ! rpcinfo -p >/dev/null 2>&1; then
+    echo "ERROR: rpcbind not responding"
+    exit 1
+fi
+echo "rpcbind is ready"
 
 # Check available NFS versions
 echo "Checking available NFS versions..."
