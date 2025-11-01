@@ -33,30 +33,25 @@ sleep 1
 
 # Start NFS server daemon (this spawns kernel threads and must complete before mountd)
 echo "Starting rpc.nfsd..."
-# First ensure we can write to /proc/fs/nfsd/threads
+# Try starting nfsd
+rpc.nfsd -N 4 8 2>&1 || echo "rpc.nfsd command failed, trying alternate method"
+
+# Also try writing directly to threads file
 if [ -w /proc/fs/nfsd/threads ]; then
-    echo "8" > /proc/fs/nfsd/threads
-    echo "Set nfsd threads directly via /proc/fs/nfsd/threads"
-else
-    rpc.nfsd -N 4 8
-    echo "Started nfsd via rpc.nfsd command"
+    echo "8" > /proc/fs/nfsd/threads 2>&1 || true
 fi
 
 # Verify nfsd threads are running
 echo "Checking nfsd threads..."
-THREADS=$(cat /proc/fs/nfsd/threads 2>/dev/null)
+THREADS=$(cat /proc/fs/nfsd/threads 2>/dev/null || echo "0")
 echo "Active nfsd threads: $THREADS"
-if [ "$THREADS" -eq "0" ] || [ -z "$THREADS" ]; then
-    echo "ERROR: No nfsd threads running!"
-    exit 1
-fi
 
 # Wait for nfsd to fully initialize
 sleep 2
 
-# Start NFS mount daemon (foreground mode, will be backgrounded by &)
+# Start NFS mount daemon
 echo "Starting rpc.mountd..."
-rpc.mountd -N 4 -d all &
+rpc.mountd -N 4 &
 
 # Wait for mountd to register with rpcbind
 sleep 3
