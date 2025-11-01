@@ -6,7 +6,6 @@ services:
     network_mode: host
     volumes:
       - ./vxworks-files:/nfs/vxworks
-      - /proc/fs/nfsd:/proc/fs/nfsd:rw
       - /lib/modules:/lib/modules:ro
     restart: unless-stopped
     cap_add:
