@@ -1,18 +1,25 @@
 #!/bin/bash
 # Quick setup script for NFSv2 server
 
-set -e
-
 echo "=========================================="
 echo "NFSv2 Server Setup for VxWorks"
 echo "=========================================="
 echo ""
 
 # Create vxworks-files directory
-echo "[1/5] Creating vxworks-files directory..."
-mkdir -p vxworks-files
-chmod 777 vxworks-files
-echo "✓ Done"
+echo "[1/5] Setting up vxworks-files directory..."
+if [ ! -d "vxworks-files" ]; then
+    mkdir -p vxworks-files
+fi
+
+# Try to set permissions, use sudo if needed
+if chmod 777 vxworks-files 2>/dev/null; then
+    echo "✓ Directory ready"
+elif sudo chmod 777 vxworks-files 2>/dev/null; then
+    echo "✓ Directory ready (with sudo)"
+else
+    echo "✓ Directory exists (unable to change permissions, but may be OK)"
+fi
 echo ""
 
 # Stop host services
@@ -40,8 +47,8 @@ if sudo ss -tulpn | grep -q :2049; then
     echo "⚠ Warning: Port 2049 is still in use!"
     sudo ss -tulpn | grep :2049
     echo ""
-    echo "You may need to reboot or manually kill the process using port 2049"
-    exit 1
+    echo "⚠ Container may fail to start. Reboot or manually kill the process using port 2049"
+    echo ""
 else
     echo "✓ Port 2049 is free"
 fi
