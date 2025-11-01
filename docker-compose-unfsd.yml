@@ -1,0 +1,17 @@
+services:
+  nfsv2-server:
+    build:
+      context: .
+      dockerfile: Dockerfile.unfsd
+    container_name: nfsv2-vxworks-unfsd
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./vxworks-files:/nfs/vxworks
+    restart: unless-stopped
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    environment:
+      - TZ=America/New_York
+
