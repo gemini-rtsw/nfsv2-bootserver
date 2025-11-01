@@ -11,19 +11,44 @@ sleep 2
 echo "Checking available NFS versions..."
 cat /proc/fs/nfsd/versions 2>/dev/null || echo "NFS versions info not available"
 
-# Start NFS services (allow v2 and v3, disable v4 for legacy compatibility)
-echo "Starting NFS services..."
-rpc.nfsd -N 4 8
-rpc.mountd -N 4
+# Start NFS statd (needs to run first)
+echo "Starting rpc.statd..."
 rpc.statd
 
-# Export NFS shares
+# Wait a moment
+sleep 1
+
+# Start NFS mount daemon (must run before exports)
+echo "Starting rpc.mountd..."
+rpc.mountd -N 4 &
+MOUNTD_PID=$!
+
+# Wait for mountd to be ready
+sleep 2
+
+# Start NFS server daemon
+echo "Starting rpc.nfsd..."
+rpc.nfsd -N 4 8
+NFSD_PID=$!
+
+# Wait a moment for nfsd to initialize
+sleep 2
+
+# Export NFS shares (after mountd is running)
 echo "Exporting NFS shares..."
 exportfs -ra
+
+# Verify exports are registered
+sleep 2
 
 # Show current exports
 echo "Current NFS exports:"
 exportfs -v
+
+# Verify RPC services are registered
+echo ""
+echo "Registered RPC services:"
+rpcinfo -p localhost 2>/dev/null | grep -E '(mountd|nfs|portmapper)' || echo "Warning: RPC services may not be fully registered yet"
 
 # Start systemd sockets for rsh/rlogin
 echo "Starting rsh/rlogin services via systemd..."
