@@ -1,10 +1,16 @@
 #!/bin/bash
 
-# Start rpcbind
-echo "Starting rpcbind..."
-rpcbind -w
+# Check if rpcbind is already running (host mode)
+if pgrep -x rpcbind > /dev/null; then
+    echo "rpcbind already running (using host's rpcbind)"
+else
+    echo "Starting rpcbind..."
+    rpcbind -w
+    sleep 2
+fi
 
-# Wait for rpcbind to be ready
+# Ensure rpcbind is accessible
+echo "Waiting for rpcbind to be ready..."
 sleep 2
 
 # Check available NFS versions
@@ -13,26 +19,24 @@ cat /proc/fs/nfsd/versions 2>/dev/null || echo "NFS versions info not available"
 
 # Start NFS statd (needs to run first)
 echo "Starting rpc.statd..."
-rpc.statd
+rpc.statd &
 
 # Wait a moment
 sleep 1
 
-# Start NFS mount daemon (must run before exports)
-echo "Starting rpc.mountd..."
-rpc.mountd -N 4 &
-MOUNTD_PID=$!
-
-# Wait for mountd to be ready
-sleep 2
-
-# Start NFS server daemon
+# Start NFS server daemon (this spawns kernel threads)
 echo "Starting rpc.nfsd..."
 rpc.nfsd -N 4 8
-NFSD_PID=$!
 
 # Wait a moment for nfsd to initialize
 sleep 2
+
+# Start NFS mount daemon (must run in background)
+echo "Starting rpc.mountd..."
+rpc.mountd -N 4 -F &
+
+# Wait for mountd to register with rpcbind
+sleep 3
 
 # Export NFS shares (after mountd is running)
 echo "Exporting NFS shares..."
