@@ -17,26 +17,41 @@ sleep 2
 echo "Checking available NFS versions..."
 cat /proc/fs/nfsd/versions 2>/dev/null || echo "NFS versions info not available"
 
+# Load nfsd kernel module
+echo "Loading nfsd kernel module..."
+modprobe nfsd 2>/dev/null || true
+
+# Mount nfsd filesystem
+mount -t nfsd nfsd /proc/fs/nfsd 2>/dev/null || true
+
 # Start NFS statd (needs to run first)
 echo "Starting rpc.statd..."
-rpc.statd &
+rpc.statd
 
 # Wait a moment
 sleep 1
 
-# Start NFS server daemon (this spawns kernel threads)
+# Start NFS server daemon (this spawns kernel threads and must complete before mountd)
 echo "Starting rpc.nfsd..."
 rpc.nfsd -N 4 8
 
-# Wait a moment for nfsd to initialize
-sleep 2
+# Verify nfsd is running
+echo "Checking nfsd threads..."
+ps -ef | grep '\[nfsd\]' || echo "Warning: nfsd kernel threads may not be running"
 
-# Start NFS mount daemon (must run in background)
+# Wait for nfsd to fully initialize
+sleep 3
+
+# Start NFS mount daemon (foreground mode, will be backgrounded by &)
 echo "Starting rpc.mountd..."
-rpc.mountd -N 4 -F &
+rpc.mountd -N 4 -d all &
 
 # Wait for mountd to register with rpcbind
 sleep 3
+
+# Verify mountd registered
+echo "Verifying mountd registration..."
+rpcinfo -p localhost | grep mountd || echo "Warning: mountd not registered with rpcbind"
 
 # Export NFS shares (after mountd is running)
 echo "Exporting NFS shares..."

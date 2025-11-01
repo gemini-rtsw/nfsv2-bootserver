@@ -10,6 +10,7 @@ RUN dnf install -y epel-release && \
     vim \
     iproute \
     procps-ng \
+    kmod \
     && dnf clean all
 
 # Create NFS export directory
