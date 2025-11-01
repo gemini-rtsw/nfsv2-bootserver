@@ -9,16 +9,9 @@ else
     sleep 2
 fi
 
-# Ensure rpcbind is accessible
+# Simple wait for rpcbind
 echo "Waiting for rpcbind to be ready..."
-for i in {1..10}; do
-    if rpcinfo -p localhost > /dev/null 2>&1; then
-        echo "rpcbind is ready"
-        break
-    fi
-    echo "Waiting for rpcbind... ($i/10)"
-    sleep 1
-done
+sleep 2
 
 # Check available NFS versions
 echo "Checking available NFS versions..."
