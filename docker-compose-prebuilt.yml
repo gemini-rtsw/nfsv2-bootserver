@@ -1,0 +1,12 @@
+services:
+  nfsv2-server:
+    image: mitcdh/unfs3
+    container_name: nfsv2-vxworks-prebuilt
+    privileged: true
+    network_mode: host
+    volumes:
+      - ./vxworks-files:/export
+    restart: unless-stopped
+    environment:
+      - TZ=America/New_York
+
