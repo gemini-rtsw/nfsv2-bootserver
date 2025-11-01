@@ -1,240 +1,206 @@
-# NFSv2 and rsh/rcp Server for VxWorks Tornado 2.0
+# NFSv2 Server for VxWorks Tornado 2.0
 
-This Docker container provides NFSv2 NFS server and rsh/rcp services specifically designed to support legacy VxWorks Tornado 2.0 VME images.
+Docker-based NFS server using unfsd (userspace NFS) to provide NFSv2 support for VxWorks Tornado 2.0 systems on Rocky 9 hosts.
 
-## Features
+## Quick Setup
 
-- **NFSv2 Support**: Configured to serve NFS version 2 protocol only
-- **rsh/rcp/rlogin**: Legacy remote shell and copy utilities
-- **Rocky Linux 9**: Based on modern, stable RHEL-compatible distribution
-- **Optimized for VxWorks**: Pre-configured for VxWorks boot and development needs
+### 1. Prepare the Host (Rocky Linux 8/9)
 
-## ⚠️ Security Warning
+```bash
+# Clone/pull the repo
+cd /path/to/docker-nfsv2
+git pull
 
-**This container uses extremely insecure legacy protocols (NFSv2, rsh, rcp) that should NEVER be exposed to the internet or untrusted networks.**
+# Create directory for VxWorks files
+mkdir -p vxworks-files
+chmod 777 vxworks-files
 
-Only use this container:
-- On isolated lab networks
-- Behind firewalls
-- For legacy system support only
-- Where VxWorks/Tornado 2.0 compatibility is required
+# Stop host NFS services (required for network_mode: host)
+sudo systemctl stop nfs-server rpcbind rpcbind.socket
+sudo systemctl disable nfs-server rpcbind rpcbind.socket
 
-## Prerequisites
+# Stop kernel NFS threads if running
+echo 0 | sudo tee /proc/fs/nfsd/threads
 
-- Docker
-- Docker Compose (optional)
-- Host system with sufficient privileges
+# Verify port 2049 is free
+sudo ss -tulpn | grep 2049
+```
+
+### 2. Start the NFS Server
+
+```bash
+# Start the container
+docker compose up -d
+
+# Check it's running
+docker logs nfsv2-vxworks
+
+# Verify NFS is working
+showmount -e localhost
+# Should show: /export *
+
+# Check RPC services
+rpcinfo -p localhost | grep 100003
+```
+
+Expected output:
+```
+UNFS3 unfsd 0.9.22 (C) 2006, Pascal Schmidt
+/export: ip 0.0.0.0 mask 0.0.0.0 options 5
+```
+
+### 3. Get Your Host IP
+
+```bash
+hostname -I
+# Example: 10.26.70.200
+```
+
+### 4. Mount from VxWorks
+
+From your VxWorks Tornado 2.0 shell:
+
+```vxworks
+mount "10.26.70.200", "/export", "/tgtsvr"
+ls "/tgtsvr"
+```
+
+Replace `10.26.70.200` with your actual host IP.
 
 ## Directory Structure
 
 ```
 .
-├── Dockerfile              # Container definition
-├── docker-compose.yml      # Docker Compose configuration
-├── entrypoint.sh          # Container startup script
-├── vxworks-files/         # Your VxWorks boot images and files (created on first run)
-└── README.md              # This file
+├── docker-compose.yml          # Main configuration (uses mitcdh/unfs3)
+├── vxworks-files/             # Your VxWorks boot images go here
+│   └── (place your .out files, kernels, etc. here)
+├── README.md                  # This file
+└── README-PREBUILT.md         # Detailed troubleshooting guide
 ```
 
-## Quick Start
-
-### Using Docker Compose (Recommended)
-
-1. **Create the vxworks-files directory**:
-   ```bash
-   mkdir -p vxworks-files
-   ```
-
-2. **Place your VxWorks boot images** in the `vxworks-files/` directory
-
-3. **Build and start the container**:
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **View logs**:
-   ```bash
-   docker-compose logs -f
-   ```
-
-### Using Docker CLI
-
-1. **Build the image**:
-   ```bash
-   docker build -t nfsv2-vxworks .
-   ```
-
-2. **Run the container**:
-   ```bash
-   docker run -d \
-     --name nfsv2-vxworks \
-     --privileged \
-     --network host \
-     -v $(pwd)/vxworks-files:/nfs/vxworks \
-     nfsv2-vxworks
-   ```
-
-## Usage with VxWorks Tornado 2.0
-
-### Mounting NFS from VxWorks
-
-From the VxWorks shell:
-
-```vxworks
-# Mount the NFS share
-mount "192.168.1.100", "/nfs/vxworks", "/tgtsvr"
-
-# Or specify NFS version explicitly
-nfsMount "192.168.1.100", "/nfs/vxworks", "/tgtsvr"
-```
-
-Replace `192.168.1.100` with your Docker host's IP address.
-
-### Boot Configuration
-
-In your VxWorks boot parameters:
-
-```
-boot device          : gei
-processor number     : 0
-host name            : host
-file name            : /nfs/vxworks/vxWorks
-inet on ethernet (e) : 192.168.1.50:ffffff00
-host inet (h)        : 192.168.1.100
-gateway inet (g)     : 192.168.1.1
-user (u)             : target
-ftp password (pw)    : password
-flags (f)            : 0x0
-target name (tn)     : target
-startup script (s)   : /nfs/vxworks/startup.script
-```
-
-### Using rsh/rcp
-
-From your host system or VxWorks:
+## Adding VxWorks Files
 
 ```bash
-# Copy file to container
-rcp myfile root@192.168.1.100:/nfs/vxworks/
+# Copy your boot images
+cp /path/to/vxWorks vxworks-files/
+cp /path/to/bootrom.sys vxworks-files/
 
-# Execute remote command
-rsh root@192.168.1.100 ls -la /nfs/vxworks/
-
-# Remote login
-rlogin root@192.168.1.100
+# Verify permissions
+ls -la vxworks-files/
 ```
 
-## Configuration
+## Testing from Linux
 
-### NFS Export Options
-
-The default export in `/etc/exports`:
+```bash
+# Test mount with NFSv3 (Rocky 8/9 doesn't support v2 mounting)
+sudo mkdir -p /mnt/nfs-test
+sudo mount -t nfs -o vers=3 localhost:/export /mnt/nfs-test
+ls -la /mnt/nfs-test
+sudo umount /mnt/nfs-test
 ```
-/nfs/vxworks *(rw,sync,no_root_squash,no_subtree_check,insecure,nfsvers=2)
-```
 
-- `rw`: Read-write access
-- `sync`: Synchronous writes
-- `no_root_squash`: Allow root access from clients
-- `no_subtree_check`: Improve reliability
-- `insecure`: Allow connections from ports > 1024
-- `nfsvers=2`: Only NFS version 2
-
-### Ports Used
-
-- **111** (TCP/UDP): rpcbind
-- **2049** (TCP/UDP): NFS server
-- **20048**: mountd
-- **512**: rexec
-- **513**: rlogin
-- **514**: rsh
+**Note:** Even though the Linux host can only mount with NFSv3, VxWorks has its own NFS client and should be able to use NFSv2.
 
 ## Troubleshooting
 
-### NFSv2 Not Working
+### Container won't start - "Address already in use"
 
-1. **Check if NFSv2 is actually disabled in kernel**:
-   ```bash
-   docker exec nfsv2-vxworks cat /proc/fs/nfsd/versions
-   ```
-   Should show: `-2 +3 +4` or `+2 +3 +4`
-
-2. **If NFSv2 is not available**, you may need to use NFSv3 instead. Modern kernels often have NFSv2 compiled out. To use NFSv3, modify the startup scripts.
-
-3. **Check NFS exports**:
-   ```bash
-   docker exec nfsv2-vxworks exportfs -v
-   ```
-
-### Connection Refused
-
-1. **Verify container is running**:
-   ```bash
-   docker ps | grep nfsv2
-   ```
-
-2. **Check network mode** is set to `host`
-
-3. **Verify services are running**:
-   ```bash
-   docker exec nfsv2-vxworks ps aux | grep nfs
-   docker exec nfsv2-vxworks ps aux | grep xinetd
-   ```
-
-### VxWorks Can't Mount
-
-1. **Ping test** from VxWorks to Docker host
-2. **Check firewall** on Docker host
-3. **Verify NFS version** compatibility
-4. **Try with IP address** instead of hostname
-
-## Important Notes for NFSv2
-
-**NFSv2 Limitations in Modern Systems:**
-
-Modern Linux kernels (including Rocky 9's kernel) may have NFSv2 support disabled or removed entirely. If NFSv2 doesn't work:
-
-1. **Option 1**: Use NFSv3 instead (VxWorks 5.x and Tornado 2.0 typically support NFSv3)
-2. **Option 2**: Use an older Linux distribution (CentOS 6/7) where NFSv2 is more reliably available
-3. **Option 3**: Build a custom kernel module if absolutely necessary
-
-To switch to NFSv3, modify `entrypoint.sh`:
 ```bash
-rpc.nfsd --no-nfs-version 4 8
-rpc.mountd --no-nfs-version 4
+# Check what's using port 2049
+sudo ss -tulpn | grep 2049
+
+# Stop kernel NFS
+echo 0 | sudo tee /proc/fs/nfsd/threads
+
+# Stop services
+sudo systemctl stop nfs-server rpcbind rpcbind.socket
+
+# Restart container
+docker compose restart
 ```
 
-And update `/etc/exports`:
-```
-/nfs/vxworks *(rw,sync,no_root_squash,no_subtree_check,insecure,nfsvers=3)
-```
+### Container keeps restarting
 
-## Maintenance
-
-### Stop the container:
 ```bash
-docker-compose down
-# or
-docker stop nfsv2-vxworks
+# Check logs
+docker logs nfsv2-vxworks
+
+# Verify host services are stopped
+systemctl status nfs-server rpcbind
 ```
 
-### View logs:
+### Can't mount from VxWorks
+
+1. **Check NFS is running:**
+   ```bash
+   showmount -e <host-ip>
+   ```
+
+2. **Check firewall:**
+   ```bash
+   sudo firewall-cmd --list-all
+   # If needed:
+   sudo firewall-cmd --add-service=nfs --permanent
+   sudo firewall-cmd --add-service=rpc-bind --permanent
+   sudo firewall-cmd --reload
+   ```
+
+3. **Verify network connectivity:**
+   ```bash
+   # From VxWorks, ping the host
+   ping "10.26.70.200"
+   ```
+
+4. **Check RPC services:**
+   ```bash
+   rpcinfo -p <host-ip>
+   # Should show mountd and nfs services
+   ```
+
+## NFS Protocol Version
+
+The container uses `mitcdh/unfs3` which provides:
+- **Advertised:** NFSv3 (shown in rpcinfo)
+- **Supported:** NFSv2 and NFSv3 (unfsd 0.9.22 supports both)
+- **VxWorks:** Should negotiate NFSv2 automatically
+
+Even though `rpcinfo` only shows version 3, unfsd was built to support version 2. VxWorks will negotiate the protocol version when connecting.
+
+## Container Management
+
 ```bash
-docker-compose logs -f
-# or
-docker logs -f nfsv2-vxworks
+# Stop the container
+docker compose down
+
+# Restart the container
+docker compose restart
+
+# View logs
+docker compose logs -f
+
+# Check status
+docker compose ps
 ```
 
-### Access container shell:
-```bash
-docker exec -it nfsv2-vxworks bash
-```
+## Important Notes
 
-## License
+1. **Host networking required:** The container uses `network_mode: host` for proper NFS/RPC operation
+2. **Privileged mode required:** NFS server needs elevated privileges
+3. **Port conflicts:** Host NFS services must be stopped before starting container
+4. **Export path:** The container exports `/export`, mapped to `./vxworks-files`
 
-This configuration is provided as-is for legacy system support purposes.
+## Security Warning
+
+⚠️ **This setup uses legacy, insecure protocols (NFSv2, no authentication) and should only be used on isolated lab networks for VxWorks Tornado 2.0 support.**
 
 ## Support
 
-For VxWorks-specific issues, consult your Tornado 2.0 documentation or Wind River support resources.
+See `README-PREBUILT.md` for detailed troubleshooting and alternative configurations.
 
+## What This Provides
+
+✅ NFSv2 userspace server (via unfsd)  
+✅ Works on Rocky 9 (kernel NFSv2 not required)  
+✅ Compatible with VxWorks Tornado 2.0  
+✅ Docker-based (easy deployment)  
+✅ Host networking (proper RPC operation)

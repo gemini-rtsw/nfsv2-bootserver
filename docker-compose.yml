@@ -1,17 +1,11 @@
 services:
   nfsv2-server:
-    build: .
+    image: mitcdh/unfs3
     container_name: nfsv2-vxworks
     privileged: true
     network_mode: host
     volumes:
-      - ./vxworks-files:/nfs/vxworks
-      - /lib/modules:/lib/modules:ro
+      - ./vxworks-files:/export
     restart: unless-stopped
-    cap_add:
-      - SYS_ADMIN
-      - SYS_MODULE
-      - NET_ADMIN
     environment:
       - TZ=America/New_York
-
