@@ -1,0 +1,45 @@
+FROM debian:12
+
+# Install build dependencies and rpcbind
+RUN apt-get update && \
+    apt-get install -y \
+    build-essential \
+    flex \
+    bison \
+    wget \
+    libtirpc-dev \
+    pkg-config \
+    rpcbind \
+    net-tools \
+    iproute2 \
+    procps \
+    vim \
+    autoconf \
+    automake \
+    libtool \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download and build unfsd from GitHub release
+WORKDIR /tmp
+RUN wget https://github.com/unfs3/unfs3/archive/refs/tags/unfs3-0.9.23.tar.gz && \
+    tar xzf unfs3-0.9.23.tar.gz && \
+    cd unfs3-unfs3-0.9.23 && \
+    ./bootstrap && \
+    ./configure && \
+    make && \
+    make install && \
+    cd / && \
+    rm -rf /tmp/unfs3*
+
+# Create NFS export directory
+RUN mkdir -p /nfs/vxworks && \
+    chmod -R 777 /nfs/vxworks
+
+# Add startup script
+COPY entrypoint-unfsd.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+EXPOSE 111 111/udp 2049 2049/udp
+
+ENTRYPOINT ["/entrypoint.sh"]
+
