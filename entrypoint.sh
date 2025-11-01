@@ -1,17 +1,24 @@
 #!/bin/bash
 
 # Check if rpcbind is already running (host mode)
-if pgrep -x rpcbind > /dev/null; then
+if pgrep -x rpcbind > /dev/null 2>&1; then
     echo "rpcbind already running (using host's rpcbind)"
 else
     echo "Starting rpcbind..."
-    rpcbind -w
+    rpcbind -w &
     sleep 2
 fi
 
 # Ensure rpcbind is accessible
 echo "Waiting for rpcbind to be ready..."
-sleep 2
+for i in {1..10}; do
+    if rpcinfo -p localhost > /dev/null 2>&1; then
+        echo "rpcbind is ready"
+        break
+    fi
+    echo "Waiting for rpcbind... ($i/10)"
+    sleep 1
+done
 
 # Check available NFS versions
 echo "Checking available NFS versions..."
