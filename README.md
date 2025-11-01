@@ -29,7 +29,10 @@ sudo ss -tulpn | grep 2049
 ### 2. Start the NFS Server
 
 ```bash
-# Start the container
+# Option A: Use the setup script (recommended)
+./setup.sh
+
+# Option B: Manual start
 docker compose up -d
 
 # Check it's running
@@ -41,6 +44,16 @@ showmount -e localhost
 
 # Check RPC services
 rpcinfo -p localhost | grep 100003
+```
+
+### Stopping the Server
+
+```bash
+# Use the stop script
+./stop.sh
+
+# Or manually
+docker compose down
 ```
 
 Expected output:
@@ -72,6 +85,8 @@ Replace `10.26.70.200` with your actual host IP.
 ```
 .
 ├── docker-compose.yml          # Main configuration (uses mitcdh/unfs3)
+├── setup.sh                    # Automated setup script
+├── stop.sh                     # Stop script
 ├── vxworks-files/             # Your VxWorks boot images go here
 │   └── (place your .out files, kernels, etc. here)
 ├── README.md                  # This file
