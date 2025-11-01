@@ -1,7 +1,8 @@
 FROM rockylinux:9
 
-# Install EPEL and build dependencies
+# Install EPEL and enable CRB (CodeReady Builder) for devel packages
 RUN dnf install -y epel-release && \
+    dnf config-manager --set-enabled crb && \
     dnf install -y \
     gcc \
     make \
