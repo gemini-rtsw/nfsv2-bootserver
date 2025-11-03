@@ -1,6 +1,9 @@
 # VxWorks files directory
 vxworks-files/
 
+# Test mount point
+mnt/
+
 # Docker
 .dockerignore
 

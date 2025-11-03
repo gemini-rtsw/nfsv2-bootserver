@@ -59,7 +59,7 @@ echo ""
 echo -e "${YELLOW}Checking for NFSv2 Docker image...${NC}"
 if ! docker images | grep -q "nfsv2.*working"; then
     echo -e "${YELLOW}Building NFSv2 image (first time only)...${NC}"
-    docker build -f Dockerfile.nfsv2-working -t nfsv2:working .
+    docker build -t nfsv2:working .
     echo -e "${GREEN}✓ Image built${NC}"
 else
     echo -e "${GREEN}✓ Image exists${NC}"

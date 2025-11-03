@@ -1,74 +1,114 @@
-FROM rockylinux:9
+# NFSv2 User Space Server - WORKING BUILD
+# Uses nfs-user-server 2.2beta47 from Debian archive
 
-# Install EPEL and required packages
-RUN dnf install -y epel-release && \
-    dnf install -y \
-    nfs-utils \
+FROM debian:bullseye AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    make \
+    flex \
+    bison \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy local nfs-user-server source
+WORKDIR /usr/src
+COPY nfs-user-server_2.2beta47.orig.tar.gz .
+RUN tar -xzf nfs-user-server_2.2beta47.orig.tar.gz
+
+# Build nfs-user-server
+WORKDIR /usr/src/nfs-server-2.2beta47
+RUN ./configure --prefix=/usr/local && \
+    touch site.mk && \
+    touch site.h && \
+    echo '#include <time.h>' > tmpfile && cat system.h >> tmpfile && mv tmpfile system.h && \
+    make && \
+    make install
+
+# Runtime image
+FROM debian:bullseye-slim
+
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y \
     rpcbind \
-    rsh \
-    net-tools \
-    vim \
-    iproute \
-    procps-ng \
-    kmod \
-    && dnf clean all
+    netbase \
+    procps \
+    && rm -rf /var/lib/apt/lists/*
 
-# Create NFS export directory
-RUN mkdir -p /nfs/vxworks && \
-    chmod -R 777 /nfs/vxworks
+# Copy compiled binaries from builder (they install to /usr/sbin)
+COPY --from=builder /usr/sbin/rpc.nfsd /usr/local/sbin/rpc.nfsd
+COPY --from=builder /usr/sbin/rpc.mountd /usr/local/sbin/rpc.mountd
+COPY --from=builder /usr/sbin/showmount /usr/local/sbin/showmount
 
-# Configure NFS exports for NFSv2/v3 (Rocky 9 kernel may not support v2)
-RUN echo "/nfs/vxworks *(rw,sync,no_root_squash,no_subtree_check,insecure)" > /etc/exports
+# Create export directory
+RUN mkdir -p /export && chmod 777 /export
 
-# Configure systemd socket for rsh
-RUN echo "[Unit]" > /etc/systemd/system/rsh.socket && \
-    echo "Description=RSH Server Activation Socket" >> /etc/systemd/system/rsh.socket && \
-    echo "" >> /etc/systemd/system/rsh.socket && \
-    echo "[Socket]" >> /etc/systemd/system/rsh.socket && \
-    echo "ListenStream=514" >> /etc/systemd/system/rsh.socket && \
-    echo "Accept=yes" >> /etc/systemd/system/rsh.socket && \
-    echo "" >> /etc/systemd/system/rsh.socket && \
-    echo "[Install]" >> /etc/systemd/system/rsh.socket && \
-    echo "WantedBy=sockets.target" >> /etc/systemd/system/rsh.socket
+# Create exports file
+RUN echo "/export *(rw,no_root_squash,insecure,async,no_subtree_check)" > /etc/exports
 
-# Configure systemd service for rsh
-RUN echo "[Unit]" > /etc/systemd/system/rsh@.service && \
-    echo "Description=RSH Server" >> /etc/systemd/system/rsh@.service && \
-    echo "" >> /etc/systemd/system/rsh@.service && \
-    echo "[Service]" >> /etc/systemd/system/rsh@.service && \
-    echo "ExecStart=-/usr/sbin/in.rshd -aL" >> /etc/systemd/system/rsh@.service && \
-    echo "StandardInput=socket" >> /etc/systemd/system/rsh@.service && \
-    echo "StandardError=journal" >> /etc/systemd/system/rsh@.service
+# Create startup script
+COPY <<EOF /start.sh
+#!/bin/bash
+set -e
 
-# Configure systemd socket for rlogin
-RUN echo "[Unit]" > /etc/systemd/system/rlogin.socket && \
-    echo "Description=RLogin Server Activation Socket" >> /etc/systemd/system/rlogin.socket && \
-    echo "" >> /etc/systemd/system/rlogin.socket && \
-    echo "[Socket]" >> /etc/systemd/system/rlogin.socket && \
-    echo "ListenStream=513" >> /etc/systemd/system/rlogin.socket && \
-    echo "Accept=yes" >> /etc/systemd/system/rlogin.socket && \
-    echo "" >> /etc/systemd/system/rlogin.socket && \
-    echo "[Install]" >> /etc/systemd/system/rlogin.socket && \
-    echo "WantedBy=sockets.target" >> /etc/systemd/system/rlogin.socket
+echo "=========================================="
+echo "Starting NFSv2 User-Space Server"
+echo "=========================================="
+echo ""
 
-# Configure systemd service for rlogin
-RUN echo "[Unit]" > /etc/systemd/system/rlogin@.service && \
-    echo "Description=RLogin Server" >> /etc/systemd/system/rlogin@.service && \
-    echo "" >> /etc/systemd/system/rlogin@.service && \
-    echo "[Service]" >> /etc/systemd/system/rlogin@.service && \
-    echo "ExecStart=-/usr/sbin/in.rlogind -a" >> /etc/systemd/system/rlogin@.service && \
-    echo "StandardInput=socket" >> /etc/systemd/system/rlogin@.service && \
-    echo "StandardError=journal" >> /etc/systemd/system/rlogin@.service
+# Start rpcbind
+echo "[1/3] Starting rpcbind..."
+rpcbind -w
+sleep 2
+echo "✓ rpcbind started"
+echo ""
 
-# Create .rhosts file for passwordless rsh access (INSECURE - only for legacy systems)
-RUN echo "+ +" > /root/.rhosts && \
-    chmod 600 /root/.rhosts
+# Start mountd
+echo "[2/3] Starting rpc.mountd..."
+/usr/local/sbin/rpc.mountd
+sleep 1
+echo "✓ rpc.mountd started"
+echo ""
 
-# Add startup script
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Start nfsd
+echo "[3/3] Starting rpc.nfsd (NFSv2)..."
+/usr/local/sbin/rpc.nfsd
+sleep 2
+echo "✓ rpc.nfsd started"
+echo ""
 
-EXPOSE 111 111/udp 2049 2049/udp 514 513 512 20048
+# Show registered services
+echo "=========================================="
+echo "Registered RPC Services:"
+echo "=========================================="
+rpcinfo -p localhost
+echo ""
 
-ENTRYPOINT ["/entrypoint.sh"]
+echo "=========================================="
+echo "NFSv2 Server Ready!"
+echo "=========================================="
+echo "Export: /export"
+echo "Protocol: NFSv2"
+echo ""
+echo "To mount from VxWorks:"
+echo '  mount "<host-ip>", "/export", "/tgtsvr"'
+echo ""
+echo "To test from Linux (if NFSv2 supported):"
+echo '  mount -t nfs -o vers=2 <host-ip>:/export /mnt/test'
+echo "=========================================="
+echo ""
+
+tail -f /dev/null
+EOF
+
+RUN chmod +x /start.sh
+
+EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp
+
+VOLUME ["/export"]
+
+CMD ["/start.sh"]
 
