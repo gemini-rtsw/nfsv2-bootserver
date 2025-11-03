@@ -7,6 +7,9 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Reset terminal color on exit
+trap 'echo -ne "${NC}"' EXIT
+
 echo -e "${BLUE}=========================================="
 echo "NFSv2 Server Status"
 echo "==========================================${NC}"
