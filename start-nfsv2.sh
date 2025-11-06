@@ -19,15 +19,6 @@ echo "NFSv2 Server for VxWorks"
 echo "==========================================${NC}"
 echo ""
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then 
-    echo -e "${RED}Error: This script must be run as root (sudo)${NC}"
-    echo "Reason: Need to stop host rpcbind service"
-    echo ""
-    echo "Run: sudo ./start-nfsv2.sh"
-    exit 1
-fi
-
 # Get the directory where script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
@@ -46,14 +37,14 @@ echo ""
 # Stop host rpcbind (required for network_mode: host)
 echo -e "${YELLOW}Stopping host rpcbind service...${NC}"
 if systemctl is-active --quiet rpcbind; then
-    systemctl stop rpcbind
+    sudo systemctl stop rpcbind
     echo -e "${GREEN}✓ Stopped rpcbind${NC}"
 else
     echo -e "${GREEN}✓ rpcbind already stopped${NC}"
 fi
 
 if systemctl is-enabled --quiet rpcbind 2>/dev/null; then
-    systemctl disable rpcbind
+    sudo systemctl disable rpcbind
     echo -e "${GREEN}✓ Disabled rpcbind (won't start on boot)${NC}"
 fi
 echo ""
