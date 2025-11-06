@@ -58,14 +58,34 @@ if systemctl is-enabled --quiet rpcbind 2>/dev/null; then
 fi
 echo ""
 
-# Check if image exists, build if needed
-echo -e "${YELLOW}Checking for NFSv2 Docker image...${NC}"
-if ! docker images | grep -q "nfsv2.*working"; then
-    echo -e "${YELLOW}Building NFSv2 image (first time only)...${NC}"
-    docker build -t nfsv2:working .
-    echo -e "${GREEN}✓ Image built${NC}"
+# GitLab registry configuration
+GITLAB_REGISTRY="registry.gitlab.com"
+GITLAB_PROJECT="hstecher/docker-nfsv2"
+IMAGE_NAME="nfsv2"
+IMAGE_TAG="latest"
+FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+# Check if image exists, pull if needed
+echo -e "${YELLOW}Checking for NFSv2 Docker image from GitLab registry...${NC}"
+if ! docker images | grep -q "${GITLAB_PROJECT}/${IMAGE_NAME}"; then
+    echo -e "${YELLOW}Pulling NFSv2 image from GitLab registry...${NC}"
+    echo "  Image: ${FULL_IMAGE_NAME}"
+    docker pull ${FULL_IMAGE_NAME}
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}✗ Failed to pull image from GitLab registry${NC}"
+        echo ""
+        echo "Make sure you are logged in to GitLab registry:"
+        echo "  docker login ${GITLAB_REGISTRY}"
+        echo ""
+        echo "Or build and push the image first:"
+        echo "  ./build-nfsv2.sh"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Image pulled${NC}"
 else
-    echo -e "${GREEN}✓ Image exists${NC}"
+    echo -e "${YELLOW}Checking for image updates...${NC}"
+    docker pull ${FULL_IMAGE_NAME} || echo -e "${YELLOW}Note: Could not pull latest (may be offline)${NC}"
+    echo -e "${GREEN}✓ Image available${NC}"
 fi
 echo ""
 
@@ -85,7 +105,7 @@ docker run -d \
     --network host \
     -v "${SCRIPT_DIR}/vxworks-files:/export" \
     --restart unless-stopped \
-    nfsv2:working
+    ${FULL_IMAGE_NAME}
 
 echo -e "${GREEN}✓ Container started${NC}"
 echo ""
