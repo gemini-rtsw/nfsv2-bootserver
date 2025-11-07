@@ -53,27 +53,27 @@ echo "Starting NFSv2 User-Space Server"
 echo "=========================================="
 echo ""
 
-echo "[0/3] Setting ulimit -n 65536..."
+echo "[0/4] Setting ulimit -n 65536..."
 ulimit -n 65536
 echo "✓ ulimit -n 65536"
 echo ""
 
 # Start rpcbind
-echo "[1/3] Starting rpcbind..."
+echo "[1/4] Starting rpcbind..."
 rpcbind -w
 sleep 2
 echo "✓ rpcbind started"
 echo ""
 
 # Start mountd
-echo "[2/3] Starting rpc.mountd..."
+echo "[2/4] Starting rpc.mountd..."
 /usr/sbin/rpc.mountd
 sleep 1
 echo "✓ rpc.mountd started"
 echo ""
 
 # Start nfsd
-echo "[3/3] Starting rpc.nfsd (NFSv2)..."
+echo "[3/4] Starting rpc.nfsd (NFSv2)..."
 /usr/sbin/rpc.nfsd
 sleep 2
 echo "✓ rpc.nfsd started"
@@ -100,6 +100,13 @@ echo '  mount -t nfs -o vers=2 <host-ip>:/export /mnt/test'
 echo "=========================================="
 echo ""
 
+echo "[4/4] Starting inetd (rsh/rexec)..."
+/usr/sbin/inetd
+sleep 1
+echo "✓ inetd started"
+echo ""
+
+
 tail -f /dev/null
 EOF
 
@@ -108,29 +115,26 @@ RUN chmod +x /start.sh
 EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp
 
 
-# --- ADD: rsh/rcp (inetd) ---
-# Install rsh + inetd
-RUN apt-get update && apt-get install -y \
-    openbsd-inetd \
-    rsh-redone-server \
-    rsh-redone-client \
- && rm -rf /var/lib/apt/lists/*
+# --- ADD rsh/rcp support ---
+  RUN apt-get update && apt-get install -y \
+  openbsd-inetd \
+  rsh-redone-server \
+  && rm -rf /var/lib/apt/lists/*
 
-# Configure inetd for rsh (shell=514/tcp) and rexec (exec=512/tcp)
+# add inetd services
 RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /etc/inetd.conf && \
-    printf "exec\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rexecd\tin.rexecd\n" >> /etc/inetd.conf
+  printf "exec\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rexecd\tin.rexecd\n" >> /etc/inetd.conf
 
-# Optional: non-root user and trust files (adjust IP/host as needed)
+# create user and trust 10.x.x.x
 RUN useradd -m -s /bin/bash gemvx && \
-    echo "10.0.0.0/8 gemvx" >> /etc/hosts.equiv && \
-    bash -lc 'echo "10.0.0.0/8 gemvx" > /home/gemvx/.rhosts && chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts'
+  echo "10.2.2.57 gemvx" > /home/gemvx/.rhosts && \
+  chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
 
-# Start inetd from your existing /start.sh (insert before the final tail)
-RUN sed -i '/^echo "=========================================="/i \
-echo "[RSH/RCP] Starting inetd (rsh on 514/tcp; rexec on 512/tcp)..."\\ninetd\\nsleep 1\\necho "✓ inetd started"\\necho ""' /start.sh
 
-# Expose rsh/rexec ports in addition to your existing EXPOSE
+
+# expose rsh/rexec ports
 EXPOSE 512/tcp 514/tcp
+
 
 
 
