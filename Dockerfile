@@ -1,7 +1,7 @@
 # NFSv2 User Space Server - WORKING BUILD
 # Uses nfs-user-server 2.2beta47 from Debian archive
 
-FROM debian:bullseye AS builder
+FROM debian:bullseye 
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y \
@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     flex \
     bison \
     libc6-dev \
+    strace \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy local nfs-user-server source
@@ -27,21 +28,19 @@ RUN ./configure --prefix=/usr/local && \
     make && \
     make install
 
-# Runtime image
-FROM debian:bullseye-slim
-
 # Install runtime dependencies
 RUN apt-get update && \
     apt-get install -y \
     rpcbind \
     netbase \
     procps \
+    libtirpc-common \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy compiled binaries from builder (they install to /usr/sbin)
-COPY --from=builder /usr/sbin/rpc.nfsd /usr/local/sbin/rpc.nfsd
-COPY --from=builder /usr/sbin/rpc.mountd /usr/local/sbin/rpc.mountd
-COPY --from=builder /usr/sbin/showmount /usr/local/sbin/showmount
+#COPY --from=builder /usr/sbin/rpc.nfsd /usr/local/sbin/rpc.nfsd
+#COPY --from=builder /usr/sbin/rpc.mountd /usr/local/sbin/rpc.mountd
+#COPY --from=builder /usr/sbin/showmount /usr/local/sbin/showmount
 
 # Create export directory
 RUN mkdir -p /export && chmod 777 /export
@@ -59,6 +58,11 @@ echo "Starting NFSv2 User-Space Server"
 echo "=========================================="
 echo ""
 
+echo "[0/3] Setting ulimit -n 65536..."
+ulimit -n 65536
+echo "✓ ulimit -n 65536"
+echo ""
+
 # Start rpcbind
 echo "[1/3] Starting rpcbind..."
 rpcbind -w
@@ -68,14 +72,14 @@ echo ""
 
 # Start mountd
 echo "[2/3] Starting rpc.mountd..."
-/usr/local/sbin/rpc.mountd
+/usr/sbin/rpc.mountd
 sleep 1
 echo "✓ rpc.mountd started"
 echo ""
 
 # Start nfsd
 echo "[3/3] Starting rpc.nfsd (NFSv2)..."
-/usr/local/sbin/rpc.nfsd
+/usr/sbin/rpc.nfsd
 sleep 2
 echo "✓ rpc.nfsd started"
 echo ""
@@ -109,6 +113,5 @@ RUN chmod +x /start.sh
 EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp
 
 VOLUME ["/export"]
-
 CMD ["/start.sh"]
 

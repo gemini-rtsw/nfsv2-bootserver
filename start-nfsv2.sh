@@ -94,7 +94,7 @@ docker run -d \
     --name nfsv2-vxworks \
     --privileged \
     --network host \
-    -v "${SCRIPT_DIR}/vxworks-files:/export" \
+    -v "/export:/export:rw" \
     --restart unless-stopped \
     ${FULL_IMAGE_NAME}
 
