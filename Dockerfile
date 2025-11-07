@@ -100,6 +100,11 @@ echo '  mount -t nfs -o vers=2 <host-ip>:/export /mnt/test'
 echo "=========================================="
 echo ""
 
+echo "Setting up gemvx user and .rhosts file..."
+chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
+echo "✓ gemvx user and .rhosts file set up"
+echo ""
+
 echo "[4/4] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
@@ -126,10 +131,7 @@ RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /
   printf "exec\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rexecd\tin.rexecd\n" >> /etc/inetd.conf
 
 # create user and trust 10.x.x.x
-RUN useradd -m -s /bin/bash gemvx && \
-  echo "10.2.2.57 gemvx" > /home/gemvx/.rhosts && \
-  chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
-
+RUN useradd -u 2966 -m -s /bin/bash gemvx
 
 
 # expose rsh/rexec ports

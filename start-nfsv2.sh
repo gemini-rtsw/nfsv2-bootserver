@@ -95,6 +95,7 @@ docker run -d \
     --privileged \
     --network host \
     -v "/export:/export:rw" \
+    -v ${SCRIPT_DIR}/config:/home/gemvx:rw \
     --restart unless-stopped \
     ${FULL_IMAGE_NAME}
 
