@@ -101,7 +101,7 @@ echo "=========================================="
 echo ""
 
 echo "Setting up gemvx user and .rhosts file..."
-chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
+chown gemvx:gemvx /home/gemvx/.rhosts && chmod 666 /home/gemvx/.rhosts
 echo "✓ gemvx user and .rhosts file set up"
 echo ""
 
