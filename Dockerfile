@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     bison \
     libc6-dev \
     strace \
+    tcpdump \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy local nfs-user-server source
@@ -138,7 +139,7 @@ RUN useradd -u 2966 -m -s /bin/bash gemvx
 # expose rsh/rexec ports
 EXPOSE 512/tcp 514/tcp
 
-
+RUN ln -s /export/gemini /gemini
 
 
 VOLUME ["/export"]
