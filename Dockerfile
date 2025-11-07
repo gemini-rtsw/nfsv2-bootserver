@@ -37,11 +37,6 @@ RUN apt-get update && \
     libtirpc-common \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy compiled binaries from builder (they install to /usr/sbin)
-#COPY --from=builder /usr/sbin/rpc.nfsd /usr/local/sbin/rpc.nfsd
-#COPY --from=builder /usr/sbin/rpc.mountd /usr/local/sbin/rpc.mountd
-#COPY --from=builder /usr/sbin/showmount /usr/local/sbin/showmount
-
 # Create export directory
 RUN mkdir -p /export && chmod 777 /export
 
@@ -111,6 +106,33 @@ EOF
 RUN chmod +x /start.sh
 
 EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp
+
+
+# --- ADD: rsh/rcp (inetd) ---
+# Install rsh + inetd
+RUN apt-get update && apt-get install -y \
+    openbsd-inetd \
+    rsh-redone-server \
+    rsh-redone-client \
+ && rm -rf /var/lib/apt/lists/*
+
+# Configure inetd for rsh (shell=514/tcp) and rexec (exec=512/tcp)
+RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /etc/inetd.conf && \
+    printf "exec\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rexecd\tin.rexecd\n" >> /etc/inetd.conf
+
+# Optional: non-root user and trust files (adjust IP/host as needed)
+RUN useradd -m -s /bin/bash gemvx && \
+    echo "10.0.0.0/8 gemvx" >> /etc/hosts.equiv && \
+    bash -lc 'echo "10.0.0.0/8 gemvx" > /home/gemvx/.rhosts && chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts'
+
+# Start inetd from your existing /start.sh (insert before the final tail)
+RUN sed -i '/^echo "=========================================="/i \
+echo "[RSH/RCP] Starting inetd (rsh on 514/tcp; rexec on 512/tcp)..."\\ninetd\\nsleep 1\\necho "✓ inetd started"\\necho ""' /start.sh
+
+# Expose rsh/rexec ports in addition to your existing EXPOSE
+EXPOSE 512/tcp 514/tcp
+
+
 
 VOLUME ["/export"]
 CMD ["/start.sh"]
