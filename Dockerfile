@@ -38,11 +38,15 @@ RUN apt-get update && \
     libtirpc-common \
     && rm -rf /var/lib/apt/lists/*
 
-# Create export directory
-RUN mkdir -p /export && chmod 777 /export
+# Create export directory and log directory
+RUN mkdir -p /export && chmod 777 /export && \
+    mkdir -p /var/log && chmod 755 /var/log
 
-# Create exports file
-RUN echo "/export *(rw,no_root_squash,insecure,async,no_subtree_check)" > /etc/exports
+# Create exports file - export both /export and /export/gemini explicitly
+# Using specific hostname/IP instead of * to avoid mountd hostname validation issues
+# Client resolves to: mkoaltairioc-ap1.hi.gemini.edu (10.2.2.233)
+RUN printf '/export mkoaltairioc-ap1.hi.gemini.edu(rw,no_root_squash)\n/export 10.2.2.233(rw,no_root_squash)\n/export/gemini mkoaltairioc-ap1.hi.gemini.edu(rw,no_root_squash)\n/export/gemini 10.2.2.233(rw,no_root_squash)\n' > /etc/exports && \
+    cat /etc/exports
 
 # Create startup script
 COPY <<EOF /start.sh
@@ -66,18 +70,33 @@ sleep 2
 echo "✓ rpcbind started"
 echo ""
 
-# Start mountd
-echo "[2/4] Starting rpc.mountd..."
-/usr/sbin/rpc.mountd
+# Start mountd with strace debugging (including RPC calls and all file operations)
+echo "[2/4] Starting rpc.mountd with strace logging..."
+strace -f -o /var/log/mountd.log -e trace=all -e verbose=all /usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1 &
+MOUNTD_PID=$!
 sleep 1
-echo "✓ rpc.mountd started"
+if ps -p $MOUNTD_PID > /dev/null 2>&1; then
+    echo "✓ rpc.mountd started (PID: $MOUNTD_PID)"
+    echo "  Strace log: /var/log/mountd.log"
+    echo "  Stdout log: /var/log/mountd-stdout.log"
+else
+    echo "⚠ Warning: mountd may have exited, check logs"
+    cat /var/log/mountd-stdout.log 2>/dev/null || true
+fi
 echo ""
 
-# Start nfsd
-echo "[3/4] Starting rpc.nfsd (NFSv2)..."
-/usr/sbin/rpc.nfsd
+# Start nfsd with debug logging
+echo "[3/4] Starting rpc.nfsd (NFSv2) with logging..."
+/usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1 &
+NFSD_PID=$!
 sleep 2
-echo "✓ rpc.nfsd started"
+if ps -p $NFSD_PID > /dev/null 2>&1; then
+    echo "✓ rpc.nfsd started (PID: $NFSD_PID)"
+    echo "  Debug log: /var/log/nfsd.log"
+else
+    echo "⚠ Warning: nfsd may have exited, check /var/log/nfsd.log"
+    cat /var/log/nfsd.log 2>/dev/null || true
+fi
 echo ""
 
 # Show registered services
@@ -102,9 +121,13 @@ echo "=========================================="
 echo ""
 
 echo "Setting up gemvx user and .rhosts file..."
-cp /home/gemvx/config/.rhosts /home/gemvx/.rhosts
-chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
-echo "✓ gemvx user and .rhosts file set up"
+if [ -f /home/gemvx/config/.rhosts ]; then
+    cp /home/gemvx/config/.rhosts /home/gemvx/.rhosts
+    chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
+    echo "✓ gemvx user and .rhosts file set up"
+else
+    echo "⚠ Warning: /home/gemvx/config/.rhosts not found, skipping .rhosts setup"
+fi
 echo ""
 
 echo "[4/4] Starting inetd (rsh/rexec)..."
@@ -113,6 +136,34 @@ sleep 1
 echo "✓ inetd started"
 echo ""
 
+# Show debug info
+echo "=========================================="
+echo "Debug Information"
+echo "=========================================="
+echo "Mountd strace log: /var/log/mountd.log"
+echo "Mountd stdout log: /var/log/mountd-stdout.log"
+echo "NFSd log: /var/log/nfsd.log"
+echo ""
+echo "To monitor logs:"
+echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd.log"
+echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd-stdout.log"
+echo "  docker exec nfsv2-vxworks tail -f /var/log/nfsd.log"
+echo ""
+
+# Verify mount path exists and show permissions
+echo "Checking export path permissions..."
+if [ -d /export/gemini/altair/V3-7gate ]; then
+    echo "✓ Path exists: /export/gemini/altair/V3-7gate"
+    ls -ld /export/gemini/altair/V3-7gate
+    echo "  Permissions: $(stat -c '%a' /export/gemini/altair/V3-7gate 2>/dev/null || stat -f '%A' /export/gemini/altair/V3-7gate)"
+else
+    echo "⚠ Path does not exist: /export/gemini/altair/V3-7gate"
+    echo "  Creating parent directories..."
+    mkdir -p /export/gemini/altair/V3-7gate
+    chmod -R 777 /export/gemini
+    echo "✓ Created and set permissions"
+fi
+echo ""
 
 tail -f /dev/null
 EOF
