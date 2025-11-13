@@ -43,9 +43,8 @@ RUN mkdir -p /export && chmod 777 /export && \
     mkdir -p /var/log && chmod 755 /var/log
 
 # Create exports file - export both /export and /export/gemini explicitly
-# Using specific hostname/IP instead of * to avoid mountd hostname validation issues
-# Client resolves to: mkoaltairioc-ap1.hi.gemini.edu (10.2.2.233)
-RUN printf '/export mkoaltairioc-ap1.hi.gemini.edu(rw,no_root_squash)\n/export 10.2.2.233(rw,no_root_squash)\n/export/gemini mkoaltairioc-ap1.hi.gemini.edu(rw,no_root_squash)\n/export/gemini 10.2.2.233(rw,no_root_squash)\n' > /etc/exports && \
+# List specific IPs that are allowed to mount
+RUN printf '/export 10.2.2.233(rw,no_root_squash)\n/export 10.2.2.234(rw,no_root_squash)\n/export 10.2.2.235(rw,no_root_squash)\n/export 10.2.2.236(rw,no_root_squash)\n/export/gemini 10.2.2.233(rw,no_root_squash)\n/export/gemini 10.2.2.234(rw,no_root_squash)\n/export/gemini 10.2.2.235(rw,no_root_squash)\n/export/gemini 10.2.2.236(rw,no_root_squash)\n' > /etc/exports && \
     cat /etc/exports
 
 # Create startup script
