@@ -44,7 +44,7 @@ RUN mkdir -p /export && chmod 777 /export && \
 
 # Create exports file - export both /export and /export/gemini explicitly
 # List specific IPs that are allowed to mount
-RUN printf '/export 10.2.2.233(rw,no_root_squash)\n/export 10.2.2.234(rw,no_root_squash)\n/export 10.2.2.235(rw,no_root_squash)\n/export 10.2.2.236(rw,no_root_squash)\n/export/gemini 10.2.2.233(rw,no_root_squash)\n/export/gemini 10.2.2.234(rw,no_root_squash)\n/export/gemini 10.2.2.235(rw,no_root_squash)\n/export/gemini 10.2.2.236(rw,no_root_squash)\n' > /etc/exports && \
+RUN printf '/export 10.2.2.233(rw,no_root_squash)\n/export 10.2.2.234(rw,no_root_squash)\n/export 10.2.2.235(rw,no_root_squash)\n/export 10.2.2.236(rw,no_root_squash)\n/export 10.2.49.12(rw,no_root_squash)\n/export 10.2.49.13(rw,no_root_squash)\n/export 10.2.49.15(rw,no_root_squash)\n/export/gemini 10.2.2.233(rw,no_root_squash)\n/export/gemini 10.2.2.234(rw,no_root_squash)\n/export/gemini 10.2.2.235(rw,no_root_squash)\n/export/gemini 10.2.2.236(rw,no_root_squash)\n/export/gemini 10.2.49.12(rw,no_root_squash)\n/export/gemini 10.2.49.13(rw,no_root_squash)\n/export/gemini 10.2.49.15(rw,no_root_squash)\n' > /etc/exports && \
     cat /etc/exports
 
 # Create startup script
