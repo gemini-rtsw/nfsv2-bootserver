@@ -11,12 +11,3 @@
 /export 10.2.49.15(rw,no_root_squash)
 /export 10.1.44.53(rw,no_root_squash)
 
-/export/gemini 10.2.2.233(rw,no_root_squash)
-/export/gemini 10.2.2.234(rw,no_root_squash)
-/export/gemini 10.2.2.235(rw,no_root_squash)
-/export/gemini 10.2.2.236(rw,no_root_squash)
-/export/gemini 10.2.49.12(rw,no_root_squash)
-/export/gemini 10.2.49.13(rw,no_root_squash)
-/export/gemini 10.2.49.15(rw,no_root_squash)
-/export/gemini 10.1.44.53(rw,no_root_squash)
-
