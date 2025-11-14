@@ -42,9 +42,10 @@ RUN apt-get update && \
 RUN mkdir -p /export && chmod 777 /export && \
     mkdir -p /var/log && chmod 755 /var/log
 
-# Create exports file - export both /export and /export/gemini explicitly
-# List specific IPs that are allowed to mount
-RUN printf '/export 10.2.2.233(rw,no_root_squash)\n/export 10.2.2.234(rw,no_root_squash)\n/export 10.2.2.235(rw,no_root_squash)\n/export 10.2.2.236(rw,no_root_squash)\n/export 10.2.49.12(rw,no_root_squash)\n/export 10.2.49.13(rw,no_root_squash)\n/export 10.2.49.15(rw,no_root_squash)\n/export/gemini 10.2.2.233(rw,no_root_squash)\n/export/gemini 10.2.2.234(rw,no_root_squash)\n/export/gemini 10.2.2.235(rw,no_root_squash)\n/export/gemini 10.2.2.236(rw,no_root_squash)\n/export/gemini 10.2.49.12(rw,no_root_squash)\n/export/gemini 10.2.49.13(rw,no_root_squash)\n/export/gemini 10.2.49.15(rw,no_root_squash)\n' > /etc/exports && \
+# Copy exports config file (can be overridden at runtime via volume mount)
+COPY config/exports /etc/exports.template
+RUN cp /etc/exports.template /etc/exports && \
+    echo "Exports configuration:" && \
     cat /etc/exports
 
 # Create startup script
@@ -127,6 +128,17 @@ if [ -f /home/gemvx/config/.rhosts ]; then
 else
     echo "⚠ Warning: /home/gemvx/config/.rhosts not found, skipping .rhosts setup"
 fi
+echo ""
+
+echo "Setting up exports file..."
+if [ -f /home/gemvx/config/exports ]; then
+    cp /home/gemvx/config/exports /etc/exports
+    echo "✓ Using custom exports from /home/gemvx/config/exports"
+else
+    echo "✓ Using default exports from /etc/exports.template"
+fi
+echo "Exports configuration:"
+cat /etc/exports
 echo ""
 
 echo "[4/4] Starting inetd (rsh/rexec)..."
