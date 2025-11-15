@@ -1,6 +1,6 @@
 # Setting Up Host Kernel NFS for NFSv3/4
 
-Now that the NFSv2 container uses macvlan networking on `10.2.2.147`, you can enable kernel NFS on the host (`10.2.2.148`) for modern NFSv3/4 clients.
+Now that the NFSv2 container uses ipvlan networking on `10.2.2.147`, you can enable kernel NFS on the host (`10.2.2.148`) for modern NFSv3/4 clients.
 
 ## Setup Steps
 

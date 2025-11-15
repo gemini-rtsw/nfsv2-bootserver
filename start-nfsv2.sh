@@ -34,12 +34,12 @@ else
 fi
 echo ""
 
-# Note: Using macvlan network, so host rpcbind can stay running
-echo -e "${GREEN}✓ Host rpcbind can remain active (using macvlan network isolation)${NC}"
+# Note: Using ipvlan network, so host rpcbind can stay running
+echo -e "${GREEN}✓ Host rpcbind can remain active (using ipvlan network isolation)${NC}"
 echo ""
 
 # Network configuration
-NETWORK_NAME="nfs-macvlan"
+NETWORK_NAME="nfs-ipvlan"
 CONTAINER_IP="10.2.2.147"
 SUBNET="10.2.2.0/24"
 GATEWAY="10.2.2.1"
@@ -52,18 +52,19 @@ IMAGE_NAME="nfsv2"
 IMAGE_TAG="latest"
 FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
 
-# Create macvlan network if it doesn't exist
-echo -e "${YELLOW}Checking macvlan network...${NC}"
+# Create ipvlan network if it doesn't exist
+echo -e "${YELLOW}Checking ipvlan network...${NC}"
 if ! docker network ls | grep -q ${NETWORK_NAME}; then
-    echo -e "${YELLOW}Creating macvlan network ${NETWORK_NAME}...${NC}"
-    docker network create -d macvlan \
+    echo -e "${YELLOW}Creating ipvlan network ${NETWORK_NAME}...${NC}"
+    docker network create -d ipvlan \
         --subnet=${SUBNET} \
         --gateway=${GATEWAY} \
         -o parent=${PARENT_INTERFACE} \
+        -o ipvlan_mode=l2 \
         ${NETWORK_NAME}
-    echo -e "${GREEN}✓ Macvlan network created${NC}"
+    echo -e "${GREEN}✓ IPVLAN network created (shares host MAC address)${NC}"
 else
-    echo -e "${GREEN}✓ Macvlan network already exists${NC}"
+    echo -e "${GREEN}✓ IPVLAN network already exists${NC}"
 fi
 echo ""
 
