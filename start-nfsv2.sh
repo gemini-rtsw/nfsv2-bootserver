@@ -34,20 +34,16 @@ else
 fi
 echo ""
 
-# Stop host rpcbind (required for network_mode: host)
-echo -e "${YELLOW}Stopping host rpcbind service...${NC}"
-if systemctl is-active --quiet rpcbind; then
-    sudo systemctl stop rpcbind
-    echo -e "${GREEN}✓ Stopped rpcbind${NC}"
-else
-    echo -e "${GREEN}✓ rpcbind already stopped${NC}"
-fi
-
-if systemctl is-enabled --quiet rpcbind 2>/dev/null; then
-    sudo systemctl disable rpcbind
-    echo -e "${GREEN}✓ Disabled rpcbind (won't start on boot)${NC}"
-fi
+# Note: Using macvlan network, so host rpcbind can stay running
+echo -e "${GREEN}✓ Host rpcbind can remain active (using macvlan network isolation)${NC}"
 echo ""
+
+# Network configuration
+NETWORK_NAME="nfs-macvlan"
+CONTAINER_IP="10.2.2.149"
+SUBNET="10.2.2.0/24"
+GATEWAY="10.2.2.1"
+PARENT_INTERFACE="ens33"
 
 # GitLab registry configuration
 GITLAB_REGISTRY="registry.gitlab.com"
@@ -55,6 +51,21 @@ GITLAB_PROJECT="hstecher/docker-nfsv2"
 IMAGE_NAME="nfsv2"
 IMAGE_TAG="latest"
 FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
+
+# Create macvlan network if it doesn't exist
+echo -e "${YELLOW}Checking macvlan network...${NC}"
+if ! docker network ls | grep -q ${NETWORK_NAME}; then
+    echo -e "${YELLOW}Creating macvlan network ${NETWORK_NAME}...${NC}"
+    docker network create -d macvlan \
+        --subnet=${SUBNET} \
+        --gateway=${GATEWAY} \
+        -o parent=${PARENT_INTERFACE} \
+        ${NETWORK_NAME}
+    echo -e "${GREEN}✓ Macvlan network created${NC}"
+else
+    echo -e "${GREEN}✓ Macvlan network already exists${NC}"
+fi
+echo ""
 
 # Check if image exists, pull if needed
 echo -e "${YELLOW}Checking for NFSv2 Docker image from GitLab registry...${NC}"
@@ -90,10 +101,12 @@ fi
 
 # Start the container
 echo -e "${YELLOW}Starting NFSv2 server container...${NC}"
+echo -e "${BLUE}Container will be accessible at: ${CONTAINER_IP}${NC}"
 docker run -d \
     --name nfsv2-vxworks \
+    --network ${NETWORK_NAME} \
+    --ip ${CONTAINER_IP} \
     --privileged \
-    --network host \
     -v "/export:/export:rw" \
     -v ${SCRIPT_DIR}/config:/home/gemvx/config:rw \
     --restart unless-stopped \
@@ -118,26 +131,41 @@ echo ""
 echo -e "${BLUE}=========================================="
 echo "Network Information"
 echo "==========================================${NC}"
-echo "Your server is accessible at these IP addresses:"
+echo -e "${YELLOW}NFSv2 Container (for VxWorks):${NC}"
+echo -e "  ${GREEN}${CONTAINER_IP}${NC}"
 echo ""
-ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | while read ip; do
-    echo -e "  ${GREEN}$ip${NC}"
-done
+echo -e "${YELLOW}Host (for NFSv3/4):${NC}"
+HOST_IP=$(ip -4 addr show ${PARENT_INTERFACE} | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+if [ -n "$HOST_IP" ]; then
+    echo -e "  ${GREEN}${HOST_IP}${NC}"
+else
+    echo "  Could not determine host IP"
+fi
 echo ""
 
 # Show VxWorks mount command
 echo -e "${BLUE}=========================================="
-echo "VxWorks Mount Command"
+echo "VxWorks Mount Command (NFSv2)"
 echo "==========================================${NC}"
-HOST_IP=$(ip -4 addr show | grep -oP '(?<=inet\s)\d+(\.\d+){3}' | grep -v '127.0.0.1' | head -1)
+echo -e "From VxWorks shell, run:"
+echo ""
+echo -e "  ${GREEN}-> nfsMount(\"${CONTAINER_IP}\", \"/export\", \"/tgtsvr\")${NC}"
+echo ""
+echo "Then access files at: /tgtsvr/"
+echo ""
+
+# Show modern client mount command
+echo -e "${BLUE}=========================================="
+echo "Modern Client Mount (NFSv3/4 - requires host NFS setup)"
+echo "==========================================${NC}"
 if [ -n "$HOST_IP" ]; then
-    echo -e "From VxWorks shell, run:"
+    echo -e "From Linux client, run:"
     echo ""
-    echo -e "  ${GREEN}-> mount \"${HOST_IP}\", \"/export\", \"/tgtsvr\"${NC}"
+    echo -e "  ${GREEN}mount -t nfs ${HOST_IP}:/export /mnt${NC}"
     echo ""
-    echo "Then access files at: /tgtsvr/"
+    echo -e "${YELLOW}Note: Configure host /etc/exports for NFSv3/4 access${NC}"
 else
-    echo "Could not determine host IP. Use your server's IP address."
+    echo "Could not determine host IP"
 fi
 echo ""
 
