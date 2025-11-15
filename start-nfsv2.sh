@@ -40,7 +40,7 @@ echo ""
 
 # Network configuration
 NETWORK_NAME="nfs-macvlan"
-CONTAINER_IP="10.2.2.149"
+CONTAINER_IP="10.2.2.147"
 SUBNET="10.2.2.0/24"
 GATEWAY="10.2.2.1"
 PARENT_INTERFACE="ens33"

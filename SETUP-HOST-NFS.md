@@ -1,6 +1,6 @@
 # Setting Up Host Kernel NFS for NFSv3/4
 
-Now that the NFSv2 container uses macvlan networking on `10.2.2.149`, you can enable kernel NFS on the host (`10.2.2.148`) for modern NFSv3/4 clients.
+Now that the NFSv2 container uses macvlan networking on `10.2.2.147`, you can enable kernel NFS on the host (`10.2.2.148`) for modern NFSv3/4 clients.
 
 ## Setup Steps
 
@@ -65,7 +65,7 @@ sudo firewall-cmd --reload
 ### VxWorks (NFSv2) Clients
 Mount from container IP:
 ```
-nfsMount("10.2.2.149", "/export", "/tgtsvr")
+nfsMount("10.2.2.147", "/export", "/tgtsvr")
 ```
 
 ### Modern (NFSv3/4) Clients
@@ -81,11 +81,11 @@ mount -t nfs 10.2.2.148:/export /mnt
 sudo rpcinfo -p localhost | grep nfs
 
 # You should see:
-# - Container NFSv2 on 10.2.2.149 (version 2)
+# - Container NFSv2 on 10.2.2.147 (version 2)
 # - Host kernel NFS on 10.2.2.148 (versions 3 and 4)
 
 # Test from another machine:
-rpcinfo -p 10.2.2.149 | grep nfs  # Should show version 2
+rpcinfo -p 10.2.2.147 | grep nfs  # Should show version 2
 rpcinfo -p 10.2.2.148 | grep nfs  # Should show versions 3 and 4
 ```
 
