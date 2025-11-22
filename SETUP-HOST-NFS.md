@@ -4,7 +4,42 @@ Now that the NFSv2 container uses ipvlan networking on `10.2.2.147`, you can ena
 
 ## Setup Steps
 
-### 1. Enable host rpcbind and NFS services
+### 1. Enable Promiscuous Mode (Required for IPVLAN)
+
+IPVLAN requires the parent network interface to be in promiscuous mode:
+
+```bash
+# Enable promiscuous mode on the parent interface
+sudo ip link set ens33 promisc on
+
+# Verify it's enabled (should see PROMISC in the flags)
+ip link show ens33
+```
+
+To make this persistent across reboots:
+
+```bash
+# Create a systemd service
+sudo tee /etc/systemd/system/ens33-promisc.service > /dev/null <<EOF
+[Unit]
+Description=Enable promiscuous mode on ens33
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/ip link set ens33 promisc on
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Enable the service
+sudo systemctl daemon-reload
+sudo systemctl enable ens33-promisc.service
+```
+
+### 2. Enable host rpcbind and NFS services
 
 ```bash
 # Start and enable rpcbind

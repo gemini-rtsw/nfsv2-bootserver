@@ -29,13 +29,22 @@ RUN ./configure --prefix=/usr/local && \
     make && \
     make install
 
-# Install runtime dependencies
+# Install runtime dependencies and network debugging tools
 RUN apt-get update && \
     apt-get install -y \
     rpcbind \
     netbase \
     procps \
     libtirpc-common \
+    iputils-ping \
+    traceroute \
+    iproute2 \
+    net-tools \
+    dnsutils \
+    curl \
+    wget \
+    netcat \
+    telnet \
     && rm -rf /var/lib/apt/lists/*
 
 # Create export directory and log directory
@@ -58,20 +67,37 @@ echo "Starting NFSv2 User-Space Server"
 echo "=========================================="
 echo ""
 
-echo "[0/4] Setting ulimit -n 65536..."
+echo "[0/5] Setting ulimit -n 65536..."
 ulimit -n 65536
 echo "✓ ulimit -n 65536"
 echo ""
 
+# Configure network routing
+echo "[1/5] Configuring network routing..."
+# Add default route if it doesn't exist
+if ! ip route | grep -q default; then
+    echo "Adding default route via 10.2.2.1..."
+    ip route add default via 10.2.2.1 dev eth0 || echo "⚠ Warning: Could not add default route"
+fi
+# Add specific route for 10.2.49.0/24 via 10.2.2.234
+if ! ip route | grep -q "10.2.49.0/24"; then
+    echo "Adding route to 10.2.49.0/24 via 10.2.2.234..."
+    ip route add 10.2.49.0/24 via 10.2.2.234 dev eth0 || echo "⚠ Warning: Could not add 10.2.49.x route"
+fi
+echo "Current routes:"
+ip route
+echo "✓ Network routing configured"
+echo ""
+
 # Start rpcbind
-echo "[1/4] Starting rpcbind..."
+echo "[2/5] Starting rpcbind..."
 rpcbind -w
 sleep 2
 echo "✓ rpcbind started"
 echo ""
 
 # Start mountd with strace debugging (including RPC calls and all file operations)
-echo "[2/4] Starting rpc.mountd with strace logging..."
+echo "[3/5] Starting rpc.mountd with strace logging..."
 strace -f -o /var/log/mountd.log -e trace=all -e verbose=all /usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1 &
 MOUNTD_PID=$!
 sleep 1
@@ -86,7 +112,7 @@ fi
 echo ""
 
 # Start nfsd with debug logging
-echo "[3/4] Starting rpc.nfsd (NFSv2) with logging..."
+echo "[4/5] Starting rpc.nfsd (NFSv2) with logging..."
 /usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1 &
 NFSD_PID=$!
 sleep 2
@@ -141,7 +167,7 @@ echo "Exports configuration:"
 cat /etc/exports
 echo ""
 
-echo "[4/4] Starting inetd (rsh/rexec)..."
+echo "[5/5] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
 echo "✓ inetd started"

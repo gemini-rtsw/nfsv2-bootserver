@@ -4,9 +4,23 @@ A working NFSv2 user-space server for booting legacy VxWorks systems. Built from
 
 ## Quick Start (Linux)
 
+### Prerequisites
+
+Enable promiscuous mode on your network interface (required for IPVLAN):
+
+```bash
+# Enable promiscuous mode (replace ens33 with your interface name)
+sudo ip link set ens33 promisc on
+
+# Verify it's enabled (should see PROMISC in the flags)
+ip link show ens33
+```
+
+### Start the Server
+
 ```bash
 # Start the NFSv2 server
-sudo ./start-nfsv2.sh
+./start-nfsv2.sh
 
 # Check status
 ./status-nfsv2.sh
@@ -16,20 +30,21 @@ sudo ./start-nfsv2.sh
 ```
 
 The startup script will:
-- Build the Docker image (first time only)
+- Build/pull the Docker image (first time only)
 - Create the `vxworks-files/` directory
-- Start the NFSv2 server with proper configuration
+- Create an IPVLAN network
+- Start the NFSv2 server with IP 10.2.2.147
 - Display your server IP and VxWorks mount command
 
 ## VxWorks Mount
 
-From your VxWorks shell:
+From your VxWorks shell, mount from the container IP (10.2.2.147):
 
 ```
--> mount "<server-ip>", "/export", "/tgtsvr"
+-> nfsMount("10.2.2.147", "/export", "/tgtsvr")
 ```
 
-Replace `<server-ip>` with your Linux server's IP address.
+If you changed the container IP in `start-nfsv2.sh`, use that IP instead.
 
 ## File Management
 
@@ -50,29 +65,43 @@ If you want to build/run manually:
 # Build the image
 docker build -t nfsv2:working .
 
+# Create IPVLAN network
+docker network create -d ipvlan \
+    --subnet=10.2.2.0/24 \
+    --gateway=10.2.2.1 \
+    -o parent=ens33 \
+    -o ipvlan_mode=l2 \
+    nfs-ipvlan
+
 # Run the container
 docker run -d \
     --name nfsv2-vxworks \
+    --network nfs-ipvlan \
+    --ip 10.2.2.147 \
     --privileged \
-    --network host \
-    -v $(pwd)/vxworks-files:/export \
+    -v /export:/export:rw \
+    -v $(pwd)/config:/home/gemvx/config:rw \
+    --restart unless-stopped \
     nfsv2:working
 ```
 
 ## Requirements
 
 - Docker
-- Linux host (requires `network_mode: host` for NFS to work properly)
-- Root access (to stop host's rpcbind service)
+- Linux host with IPVLAN support
+- Network interface in promiscuous mode (`sudo ip link set <interface> promisc on`)
+- Available IP address on your network for the container (default: 10.2.2.147)
 
 ## How It Works
 
 This builds `nfs-user-server 2.2beta47` from source, which provides true NFSv2 support. The server runs in a Docker container with:
 
 - **Protocol**: NFSv2 (required for old VxWorks systems)
-- **Export**: `/export` → mapped to `./vxworks-files/` on host
-- **Permissions**: `rw,no_root_squash,insecure` (suitable for boot/development)
-- **Network**: Host mode (NFS requires direct port access)
+- **Export**: `/export` → mapped to host's `/export` directory
+- **Permissions**: `rw,no_root_squash` per client IP (configured in `config/exports`)
+- **Network**: IPVLAN mode with dedicated IP (10.2.2.147)
+  - Uses same MAC address as host (switch-friendly)
+  - Allows host to run NFSv3/4 simultaneously on different IP
 
 ## Verification
 
@@ -89,22 +118,37 @@ The `2` in the second column indicates NFSv2.
 
 - Modern Linux kernels have removed NFSv2 client support, so you cannot test mounting from a modern Linux client
 - VxWorks has its own NFSv2 client implementation that works with this server
-- The server must run with `--privileged` and `--network host` for proper NFS operation
-- Host's rpcbind must be stopped to avoid port conflicts
+- The server uses IPVLAN networking to avoid port conflicts with host NFS
+- Host can run NFSv3/4 kernel NFS on a different IP simultaneously (see `SETUP-HOST-NFS.md`)
+- IPVLAN requires promiscuous mode on the parent interface
+- Container shares the host's MAC address but has its own IP
 
 ## Troubleshooting
 
-**Container won't start**: Make sure host rpcbind is stopped:
+**Cannot ping container from external machines**:
 ```bash
-sudo systemctl stop rpcbind
+# Enable promiscuous mode on parent interface
+sudo ip link set ens33 promisc on
+
+# Verify it's enabled
+ip link show ens33 | grep PROMISC
 ```
 
 **Can't mount from VxWorks**: 
-- Check firewall rules (ports 111, 2049 must be open)
-- Verify server IP with `ip addr`
+- Verify container IP: `docker inspect nfsv2-vxworks | grep IPAddress`
+- Check if container is reachable: `ping 10.2.2.147` (from VxWorks client)
 - Check RPC services: `docker exec nfsv2-vxworks rpcinfo -p localhost`
+- Verify client IP is in `config/exports`
+- Check debug logs: `docker exec nfsv2-vxworks tail -100 /var/log/mountd.log`
+
+**Host cannot ping container**:
+- This is normal! IPVLAN containers cannot communicate with their host
+- Use `docker exec` to access the container instead
 
 **Need to see logs**:
 ```bash
 docker logs -f nfsv2-vxworks
+docker exec nfsv2-vxworks tail -f /var/log/mountd.log
 ```
+
+**Run both NFSv2 and NFSv3/4**: See `SETUP-HOST-NFS.md` for details.
