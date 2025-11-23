@@ -26,6 +26,9 @@ RUN ./configure --prefix=/usr/local && \
     touch site.mk && \
     touch site.h && \
     echo '#include <time.h>' > tmpfile && cat system.h >> tmpfile && mv tmpfile system.h && \
+    sed -i 's/#define NFS_MAXDATA\t(16 \* 1024)/#define NFS_MAXDATA\t(32 \* 1024)/' nfsd.c && \
+    sed -i 's/#define NFS_MAXDATA 8192/#define NFS_MAXDATA 32768/' nfs_prot.h && \
+    sed -i 's/const NFS_MAXDATA       = 8192;/const NFS_MAXDATA       = 32768;/' nfs_prot.x && \
     make && \
     make install
 
