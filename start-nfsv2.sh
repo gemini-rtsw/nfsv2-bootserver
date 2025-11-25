@@ -109,7 +109,6 @@ docker run -d \
     --ip ${CONTAINER_IP} \
     --privileged \
     -v "/export:/export:rw" \
-    -v ${SCRIPT_DIR}/config:/home/gemvx/config:rw \
     --restart unless-stopped \
     ${FULL_IMAGE_NAME}
 

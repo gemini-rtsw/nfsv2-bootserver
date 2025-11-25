@@ -54,10 +54,9 @@ RUN apt-get update && \
 RUN mkdir -p /export && chmod 777 /export && \
     mkdir -p /var/log && chmod 755 /var/log
 
-# Copy exports config file (can be overridden at runtime via volume mount)
-COPY config/exports /etc/exports.template
-RUN cp /etc/exports.template /etc/exports && \
-    echo "Exports configuration:" && \
+# Copy exports config file
+COPY config/exports /etc/exports
+RUN echo "Exports configuration:" && \
     cat /etc/exports
 
 # Create startup script
@@ -149,23 +148,10 @@ echo '  mount -t nfs -o vers=2 <host-ip>:/export /mnt/test'
 echo "=========================================="
 echo ""
 
-echo "Setting up gemvx user and .rhosts file..."
-if [ -f /home/gemvx/config/.rhosts ]; then
-    cp /home/gemvx/config/.rhosts /home/gemvx/.rhosts
-    chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
-    echo "✓ gemvx user and .rhosts file set up"
-else
-    echo "⚠ Warning: /home/gemvx/config/.rhosts not found, skipping .rhosts setup"
-fi
+echo "Configuration files loaded from image:"
+echo "  - /etc/exports (NFS exports)"
+echo "  - /home/gemvx/.rhosts (gemvx user access)"
 echo ""
-
-echo "Setting up exports file..."
-if [ -f /home/gemvx/config/exports ]; then
-    cp /home/gemvx/config/exports /etc/exports
-    echo "✓ Using custom exports from /home/gemvx/config/exports"
-else
-    echo "✓ Using default exports from /etc/exports.template"
-fi
 echo "Exports configuration:"
 cat /etc/exports
 echo ""
@@ -226,6 +212,9 @@ RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /
 # create user and trust 10.x.x.x
 RUN useradd -u 2966 -m -s /bin/bash gemvx
 
+# Copy .rhosts for gemvx user
+COPY config/.rhosts /home/gemvx/.rhosts
+RUN chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
 
 # expose rsh/rexec ports
 EXPOSE 512/tcp 514/tcp
