@@ -1,4 +1,4 @@
-# NFSv2 User Space Server - WORKING BUILD
+# NFSv2 User Space Server with TFTP - For RTEMS VME Clients
 # Uses nfs-user-server 2.2beta47 from Debian archive
 
 FROM debian:bullseye 
@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     libc6-dev \
     strace \
     tcpdump \
+    tftpd-hpa \
+    tftp-hpa \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy local nfs-user-server source
@@ -53,8 +55,9 @@ RUN apt-get update && \
     sysstat \
     && rm -rf /var/lib/apt/lists/*
 
-# Create export directory and log directory
-RUN mkdir -p /export && chmod 777 /export && \
+# Create NFS export directory and log directory
+# Note: /gem_sw is used for BOTH NFS and TFTP (same as original CentOS 6 setup)
+RUN mkdir -p /gem_sw && chmod 777 /gem_sw && \
     mkdir -p /var/log && chmod 755 /var/log
 
 # Copy exports config file
@@ -68,7 +71,8 @@ COPY <<EOF /start.sh
 set -e
 
 echo "=========================================="
-echo "Starting NFSv2 User-Space Server"
+echo "Starting NFSv2 User-Space Server with TFTP"
+echo "For RTEMS VME Clients"
 echo "=========================================="
 echo ""
 
@@ -154,16 +158,22 @@ rpcinfo -p localhost
 echo ""
 
 echo "=========================================="
-echo "NFSv2 Server Ready!"
+echo "NFSv2 Server + TFTP Ready!"
 echo "=========================================="
-echo "Export: /export"
+echo "NFS Export: /gem_sw"
+echo "TFTP Root: /gem_sw (same directory as NFS)"
 echo "Protocol: NFSv2"
 echo ""
-echo "To mount from VxWorks:"
-echo '  mount "<host-ip>", "/export", "/tgtsvr"'
+echo "RTEMS Client 1: 10.1.2.177"
+echo "RTEMS Client 2: 10.2.2.104"
+echo "Host IP: 10.2.2.146"
+echo "Docker IP: 10.2.2.145"
 echo ""
-echo "To test from Linux (if NFSv2 supported):"
-echo '  mount -t nfs -o vers=2 <host-ip>:/export /mnt/test'
+echo "To mount from RTEMS:"
+echo '  nfsMount("<docker-ip>", "/gem_sw", "/mnt/nfs")'
+echo ""
+echo "To boot via TFTP from RTEMS:"
+echo '  Boot file: /gem_sw/prod/redirector/tcs-mk-ioc'
 echo "=========================================="
 echo ""
 
@@ -175,7 +185,20 @@ echo "Exports configuration:"
 cat /etc/exports
 echo ""
 
-echo "[6/6] Starting inetd (rsh/rexec)..."
+echo "[6/7] Starting TFTP server..."
+# Create TFTP configuration (serves from /gem_sw, same as NFS)
+echo "TFTP_USERNAME=\"root\"" > /etc/default/tftpd-hpa
+echo "TFTP_DIRECTORY=\"/gem_sw\"" >> /etc/default/tftpd-hpa
+echo "TFTP_ADDRESS=\"0.0.0.0:69\"" >> /etc/default/tftpd-hpa
+echo "TFTP_OPTIONS=\"--secure --create\"" >> /etc/default/tftpd-hpa
+# Start TFTP server (serving from /gem_sw, same directory as NFS export)
+/usr/sbin/in.tftpd -l -s /gem_sw -u root -c &
+sleep 1
+echo "✓ TFTP server started on port 69"
+echo "  TFTP root: /gem_sw (same as NFS export)"
+echo ""
+
+echo "[7/7] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
 echo "✓ inetd started"
@@ -190,22 +213,25 @@ echo "Mountd stdout log: /var/log/mountd-stdout.log"
 echo "NFSd log: /var/log/nfsd.log"
 echo ""
 echo "To monitor logs:"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd.log"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd-stdout.log"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/nfsd.log"
+echo "  docker exec nfsv2-rtems tail -f /var/log/mountd.log"
+echo "  docker exec nfsv2-rtems tail -f /var/log/mountd-stdout.log"
+echo "  docker exec nfsv2-rtems tail -f /var/log/nfsd.log"
+echo ""
+echo "TFTP server is running on port 69"
+echo "  Serving from: /gem_sw (same as NFS)"
 echo ""
 
 # Verify mount path exists and show permissions
-echo "Checking export path permissions..."
-if [ -d /export/gemini/altair/V3-7gate ]; then
-    echo "✓ Path exists: /export/gemini/altair/V3-7gate"
-    ls -ld /export/gemini/altair/V3-7gate
-    echo "  Permissions: $(stat -c '%a' /export/gemini/altair/V3-7gate 2>/dev/null || stat -f '%A' /export/gemini/altair/V3-7gate)"
+echo "Checking NFS export path permissions..."
+if [ -d /gem_sw ]; then
+    echo "✓ Path exists: /gem_sw"
+    ls -ld /gem_sw
+    echo "  Permissions: $(stat -c '%a' /gem_sw 2>/dev/null || stat -f '%A' /gem_sw)"
 else
-    echo "⚠ Path does not exist: /export/gemini/altair/V3-7gate"
-    echo "  Creating parent directories..."
-    mkdir -p /export/gemini/altair/V3-7gate
-    chmod -R 777 /export/gemini
+    echo "⚠ Path does not exist: /gem_sw"
+    echo "  Creating directory..."
+    mkdir -p /gem_sw
+    chmod 777 /gem_sw
     echo "✓ Created and set permissions"
 fi
 echo ""
@@ -215,7 +241,7 @@ EOF
 
 RUN chmod +x /start.sh
 
-EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp
+EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp 69/udp
 
 
 # --- ADD rsh/rcp support ---
@@ -238,9 +264,6 @@ RUN chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
 # expose rsh/rexec ports
 EXPOSE 512/tcp 514/tcp
 
-RUN ln -s /export/gemini /gemini
-
-
-VOLUME ["/export"]
+VOLUME ["/gem_sw"]
 CMD ["/start.sh"]
 

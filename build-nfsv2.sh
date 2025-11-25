@@ -22,14 +22,14 @@ echo ""
 GITLAB_REGISTRY="registry.gitlab.com"
 GITLAB_PROJECT="hstecher/docker-nfsv2"
 IMAGE_NAME="nfsv2"
-IMAGE_TAG="${1:-latest}"
+IMAGE_TAG="TCS"
 FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
 
 echo -e "${BLUE}Configuration:${NC}"
-echo "  Registry: ${GITLAB_REGISTRY}"
-echo "  Project:  ${GITLAB_PROJECT}"
-echo "  Image:    ${IMAGE_NAME}:${IMAGE_TAG}"
-echo "  Full:     ${FULL_IMAGE_NAME}"
+echo "  Registry:    ${GITLAB_REGISTRY}"
+echo "  Project:     ${GITLAB_PROJECT}"
+echo "  Image Tag:   ${GREEN}${IMAGE_TAG}${NC}"
+echo "  Full Image:  ${FULL_IMAGE_NAME}"
 echo ""
 
 # Get the directory where script is located
@@ -91,14 +91,6 @@ fi
 echo -e "${GREEN}✓ Image built successfully${NC}"
 echo ""
 
-# Also tag as latest locally for convenience
-if [ "${IMAGE_TAG}" != "latest" ]; then
-    echo -e "${YELLOW}Tagging as latest locally...${NC}"
-    docker tag ${FULL_IMAGE_NAME} ${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:latest
-    echo -e "${GREEN}✓ Tagged locally${NC}"
-    echo ""
-fi
-
 # Push to GitLab registry
 echo -e "${YELLOW}Pushing to GitLab registry...${NC}"
 docker push ${FULL_IMAGE_NAME}
@@ -108,25 +100,14 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-echo -e "${GREEN}✓ Image pushed successfully${NC}"
+echo -e "${GREEN}✓ Image pushed to ${IMAGE_TAG} tag${NC}"
 echo ""
-
-# If not latest, also push latest tag
-if [ "${IMAGE_TAG}" != "latest" ]; then
-    echo -e "${YELLOW}Pushing latest tag...${NC}"
-    docker push ${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:latest
-    echo -e "${GREEN}✓ Latest tag pushed${NC}"
-    echo ""
-fi
 
 echo -e "${GREEN}=========================================="
 echo "✅ Build and Push Complete!"
 echo "==========================================${NC}"
 echo ""
-echo "Image available at:"
-echo -e "  ${GREEN}${FULL_IMAGE_NAME}${NC}"
-echo ""
-echo "To use this image, update your scripts to use:"
+echo "Image pushed with tag:"
 echo -e "  ${GREEN}${FULL_IMAGE_NAME}${NC}"
 echo ""
 

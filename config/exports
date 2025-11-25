@@ -1,14 +1,13 @@
-# NFS Exports Configuration
-# Add one IP per line in the format: /export IP(rw,no_root_squash)
-# or /export/gemini IP(rw,no_root_squash)
+# NFS Exports Configuration for RTEMS VME Clients
+# Docker Container (NFS Server): 10.2.2.145
+# Host IP: 10.2.2.146
+# TFTP Directory: /tftpboot (separate from NFS)
+# NFS Directory: /gem_sw
+# Add one IP per line in the format: /gem_sw IP(rw,no_root_squash)
 
-/export 10.2.2.233(rw,no_root_squash)
-/export 10.2.2.234(rw,no_root_squash)
-/export 10.2.2.235(rw,no_root_squash)
-/export 10.2.2.236(rw,no_root_squash)
-/export 10.2.49.12(rw,no_root_squash)
-/export 10.2.49.13(rw,no_root_squash)
-/export 10.2.49.15(rw,no_root_squash)
-/export 10.1.44.53(rw,no_root_squash)
-/export 10.2.2.238(rw,no_root_squash)
+# RTEMS VME Client 1
+/gem_sw 10.1.2.177(rw,no_root_squash)
+
+# RTEMS VME Client 2
+/gem_sw 10.2.2.104(rw,no_root_squash)
 

@@ -15,7 +15,7 @@ NC='\033[0m' # No Color
 trap 'tput sgr0' EXIT
 
 echo -e "${BLUE}=========================================="
-echo "NFSv2 Server for VxWorks"
+echo "NFSv2 + TFTP Server for RTEMS VME"
 echo "==========================================${NC}"
 echo ""
 
@@ -23,14 +23,17 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Create vxworks-files directory if it doesn't exist
-if [ ! -d "vxworks-files" ]; then
-    echo -e "${YELLOW}Creating vxworks-files directory...${NC}"
-    mkdir -p vxworks-files
-    chmod 777 vxworks-files
-    echo -e "${GREEN}✓ Created vxworks-files/${NC}"
+# Check if /gem_sw exists on host
+if [ ! -d "/gem_sw" ]; then
+    echo -e "${RED}ERROR: /gem_sw directory does not exist on host${NC}"
+    echo -e "${YELLOW}Please create /gem_sw and copy boot files:${NC}"
+    echo "  sudo mkdir -p /gem_sw"
+    echo "  sudo chmod 777 /gem_sw"
+    echo "  # Copy files from 10.2.71.12:/gem_sw"
+    echo ""
+    exit 1
 else
-    echo -e "${GREEN}✓ vxworks-files directory exists${NC}"
+    echo -e "${GREEN}✓ /gem_sw directory exists on host${NC}"
 fi
 echo ""
 
@@ -40,7 +43,7 @@ echo ""
 
 # Network configuration
 NETWORK_NAME="nfs-ipvlan"
-CONTAINER_IP="10.2.2.147"
+CONTAINER_IP="10.2.2.145"
 SUBNET="10.2.2.0/24"
 GATEWAY="10.2.2.1"
 PARENT_INTERFACE="ens33"
@@ -49,7 +52,7 @@ PARENT_INTERFACE="ens33"
 GITLAB_REGISTRY="registry.gitlab.com"
 GITLAB_PROJECT="hstecher/docker-nfsv2"
 IMAGE_NAME="nfsv2"
-IMAGE_TAG="latest"
+IMAGE_TAG="TCS"
 FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
 
 # Create ipvlan network if it doesn't exist
@@ -93,22 +96,22 @@ fi
 echo ""
 
 # Stop and remove existing container if running
-if docker ps -a | grep -q nfsv2-vxworks; then
+if docker ps -a | grep -q nfsv2-rtems; then
     echo -e "${YELLOW}Removing existing container...${NC}"
-    docker rm -f nfsv2-vxworks > /dev/null 2>&1
+    docker rm -f nfsv2-rtems > /dev/null 2>&1
     echo -e "${GREEN}✓ Removed old container${NC}"
     echo ""
 fi
 
 # Start the container
-echo -e "${YELLOW}Starting NFSv2 server container...${NC}"
+echo -e "${YELLOW}Starting NFSv2 + TFTP server container...${NC}"
 echo -e "${BLUE}Container will be accessible at: ${CONTAINER_IP}${NC}"
 docker run -d \
-    --name nfsv2-vxworks \
+    --name nfsv2-rtems \
     --network ${NETWORK_NAME} \
     --ip ${CONTAINER_IP} \
     --privileged \
-    -v "/export:/export:rw" \
+    -v "/gem_sw:/gem_sw:rw" \
     --restart unless-stopped \
     ${FULL_IMAGE_NAME}
 
@@ -124,17 +127,17 @@ echo ""
 echo -e "${BLUE}=========================================="
 echo "Server Status"
 echo "==========================================${NC}"
-docker logs nfsv2-vxworks 2>&1 | tail -20
+docker logs nfsv2-rtems 2>&1 | tail -20
 echo ""
 
 # Get host IP addresses
 echo -e "${BLUE}=========================================="
 echo "Network Information"
 echo "==========================================${NC}"
-echo -e "${YELLOW}NFSv2 Container (for VxWorks):${NC}"
+echo -e "${YELLOW}Docker Container IP:${NC}"
 echo -e "  ${GREEN}${CONTAINER_IP}${NC}"
 echo ""
-echo -e "${YELLOW}Host (for NFSv3/4):${NC}"
+echo -e "${YELLOW}Host IP:${NC}"
 HOST_IP=$(ip -4 addr show ${PARENT_INTERFACE} | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
 if [ -n "$HOST_IP" ]; then
     echo -e "  ${GREEN}${HOST_IP}${NC}"
@@ -142,58 +145,62 @@ else
     echo "  Could not determine host IP"
 fi
 echo ""
-
-# Show VxWorks mount command
-echo -e "${BLUE}=========================================="
-echo "VxWorks Mount Command (NFSv2)"
-echo "==========================================${NC}"
-echo -e "From VxWorks shell, run:"
-echo ""
-echo -e "  ${GREEN}-> nfsMount(\"${CONTAINER_IP}\", \"/export\", \"/tgtsvr\")${NC}"
-echo ""
-echo "Then access files at: /tgtsvr/"
+echo -e "${YELLOW}RTEMS VME Clients:${NC}"
+echo -e "  ${GREEN}10.1.2.177${NC} (Client 1)"
+echo -e "  ${GREEN}10.2.2.104${NC} (Client 2)"
 echo ""
 
-# Show modern client mount command
+# Show RTEMS mount command
 echo -e "${BLUE}=========================================="
-echo "Modern Client Mount (NFSv3/4 - requires host NFS setup)"
+echo "RTEMS Mount Command (NFSv2)"
 echo "==========================================${NC}"
-if [ -n "$HOST_IP" ]; then
-    echo -e "From Linux client, run:"
-    echo ""
-    echo -e "  ${GREEN}mount -t nfs ${HOST_IP}:/export /mnt${NC}"
-    echo ""
-    echo -e "${YELLOW}Note: Configure host /etc/exports for NFSv3/4 access${NC}"
-else
-    echo "Could not determine host IP"
-fi
+echo -e "From RTEMS shell, run:"
+echo ""
+echo -e "  ${GREEN}mount -t nfs -o nfsvers=2,proto=udp ${CONTAINER_IP}:/gem_sw /mnt/nfs${NC}"
+echo ""
+echo "Then access files at: /mnt/nfs/"
+echo ""
+
+# Show TFTP boot command
+echo -e "${BLUE}=========================================="
+echo "RTEMS TFTP Boot"
+echo "==========================================${NC}"
+echo -e "TFTP and NFS both serve from: ${GREEN}/gem_sw${NC}"
+echo ""
+echo "Boot file location:"
+echo -e "  ${GREEN}/gem_sw/prod/redirector/tcs-mk-ioc${NC}"
+echo ""
+echo "From VME bootloader (PPC-Bug), the boot will use:"
+echo -e "  Server IP: ${GREEN}${CONTAINER_IP}${NC}"
+echo -e "  Boot file: ${GREEN}/gem_sw/prod/redirector/tcs-mk-ioc${NC}"
 echo ""
 
 # Show file location
 echo -e "${BLUE}=========================================="
 echo "File Management"
 echo "==========================================${NC}"
-echo "Place your VxWorks boot files in:"
-echo -e "  ${GREEN}${SCRIPT_DIR}/vxworks-files/${NC}"
+echo "Both NFS and TFTP serve from the same directory:"
+echo -e "  ${GREEN}/gem_sw${NC} (mounted from host)"
 echo ""
-echo "Example:"
-echo "  cp /path/to/vxWorks ${SCRIPT_DIR}/vxworks-files/"
-echo "  cp /path/to/bootrom.bin ${SCRIPT_DIR}/vxworks-files/"
+echo "Boot files are located at:"
+echo -e "  ${GREEN}/gem_sw/prod/redirector/tcs-mk-ioc${NC}"
+echo -e "  ${GREEN}/gem_sw/prod/redirector/tcs-mk-ioc.cmd${NC}"
 echo ""
 
 # Show useful commands
 echo -e "${BLUE}=========================================="
 echo "Useful Commands"
 echo "==========================================${NC}"
-echo "View logs:           docker logs -f nfsv2-vxworks"
-echo "Check RPC services:  docker exec nfsv2-vxworks rpcinfo -p localhost"
-echo "Stop server:         docker stop nfsv2-vxworks"
-echo "Start server:        docker start nfsv2-vxworks"
-echo "Restart server:      docker restart nfsv2-vxworks"
+echo "View logs:           docker logs -f nfsv2-rtems"
+echo "Check RPC services:  docker exec nfsv2-rtems rpcinfo -p localhost"
+echo "Check boot files:    ls -la /gem_sw/prod/redirector/"
+echo "Stop server:         docker stop nfsv2-rtems"
+echo "Start server:        docker start nfsv2-rtems"
+echo "Restart server:      docker restart nfsv2-rtems"
 echo ""
 
 echo -e "${GREEN}=========================================="
-echo "✅ NFSv2 Server is Running!"
+echo "✅ NFSv2 + TFTP Server is Running!"
 echo "==========================================${NC}"
 echo ""
 
