@@ -48,6 +48,9 @@ RUN apt-get update && \
     wget \
     netcat \
     telnet \
+    iftop \
+    nload \
+    sysstat \
     && rm -rf /var/lib/apt/lists/*
 
 # Create export directory and log directory
