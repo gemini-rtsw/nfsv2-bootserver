@@ -72,13 +72,29 @@ echo "Starting NFSv2 User-Space Server"
 echo "=========================================="
 echo ""
 
-echo "[0/5] Setting ulimit -n 65536..."
+echo "[0/6] Setting ulimit -n 65536..."
 ulimit -n 65536
 echo "✓ ulimit -n 65536"
 echo ""
 
+# Tune network buffers for reliability
+echo "[1/6] Tuning network parameters..."
+sysctl -w net.core.rmem_max=16777216
+sysctl -w net.core.wmem_max=16777216
+sysctl -w net.core.rmem_default=262144
+sysctl -w net.core.wmem_default=262144
+sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
+sysctl -w net.ipv4.tcp_wmem="4096 65536 16777216"
+sysctl -w net.ipv4.tcp_window_scaling=1
+sysctl -w net.ipv4.tcp_timestamps=1
+sysctl -w net.ipv4.tcp_keepalive_time=60
+sysctl -w net.ipv4.tcp_keepalive_intvl=10
+sysctl -w net.ipv4.tcp_keepalive_probes=6
+echo "✓ Network tuning applied"
+echo ""
+
 # Configure network routing
-echo "[1/5] Configuring network routing..."
+echo "[2/6] Configuring network routing..."
 # Add default route if it doesn't exist
 if ! ip route | grep -q default; then
     echo "Adding default route via 10.2.2.1..."
@@ -95,14 +111,14 @@ echo "✓ Network routing configured"
 echo ""
 
 # Start rpcbind
-echo "[2/5] Starting rpcbind..."
+echo "[3/6] Starting rpcbind..."
 rpcbind -w
 sleep 2
 echo "✓ rpcbind started"
 echo ""
 
 # Start mountd with strace debugging (including RPC calls and all file operations)
-echo "[3/5] Starting rpc.mountd with strace logging..."
+echo "[4/6] Starting rpc.mountd with strace logging..."
 strace -f -o /var/log/mountd.log -e trace=all -e verbose=all /usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1 &
 MOUNTD_PID=$!
 sleep 1
@@ -117,7 +133,7 @@ fi
 echo ""
 
 # Start nfsd with debug logging
-echo "[4/5] Starting rpc.nfsd (NFSv2) with logging..."
+echo "[5/6] Starting rpc.nfsd (NFSv2) with logging..."
 /usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1 &
 NFSD_PID=$!
 sleep 2
@@ -159,7 +175,7 @@ echo "Exports configuration:"
 cat /etc/exports
 echo ""
 
-echo "[5/5] Starting inetd (rsh/rexec)..."
+echo "[6/6] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
 echo "✓ inetd started"
