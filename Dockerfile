@@ -77,20 +77,20 @@ ulimit -n 65536
 echo "✓ ulimit -n 65536"
 echo ""
 
-# Tune network buffers for reliability
+# Tune network buffers for reliability (optional, requires --privileged or --sysctl)
 echo "[1/6] Tuning network parameters..."
-sysctl -w net.core.rmem_max=16777216
-sysctl -w net.core.wmem_max=16777216
-sysctl -w net.core.rmem_default=262144
-sysctl -w net.core.wmem_default=262144
-sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216"
-sysctl -w net.ipv4.tcp_wmem="4096 65536 16777216"
-sysctl -w net.ipv4.tcp_window_scaling=1
-sysctl -w net.ipv4.tcp_timestamps=1
-sysctl -w net.ipv4.tcp_keepalive_time=60
-sysctl -w net.ipv4.tcp_keepalive_intvl=10
-sysctl -w net.ipv4.tcp_keepalive_probes=6
-echo "✓ Network tuning applied"
+sysctl -w net.core.rmem_max=16777216 2>/dev/null || echo "  ⚠ Warning: Cannot set rmem_max (needs --privileged)"
+sysctl -w net.core.wmem_max=16777216 2>/dev/null || true
+sysctl -w net.core.rmem_default=262144 2>/dev/null || true
+sysctl -w net.core.wmem_default=262144 2>/dev/null || true
+sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216" 2>/dev/null || true
+sysctl -w net.ipv4.tcp_wmem="4096 65536 16777216" 2>/dev/null || true
+sysctl -w net.ipv4.tcp_window_scaling=1 2>/dev/null || true
+sysctl -w net.ipv4.tcp_timestamps=1 2>/dev/null || true
+sysctl -w net.ipv4.tcp_keepalive_time=60 2>/dev/null || true
+sysctl -w net.ipv4.tcp_keepalive_intvl=10 2>/dev/null || true
+sysctl -w net.ipv4.tcp_keepalive_probes=6 2>/dev/null || true
+echo "✓ Network tuning attempted (may require --privileged for full effect)"
 echo ""
 
 # Configure network routing
