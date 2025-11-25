@@ -20,7 +20,7 @@ echo ""
 
 # GitLab registry configuration
 GITLAB_REGISTRY="registry.gitlab.com"
-GITLAB_PROJECT="hstecher/docker-nfsv2"
+GITLAB_PROJECT="nsf-noirlab/gemini/rtsw/nfsv2-bootserver"
 IMAGE_NAME="nfsv2"
 IMAGE_TAG="TCS"
 FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
