@@ -175,7 +175,20 @@ echo "Exports configuration:"
 cat /etc/exports
 echo ""
 
-echo "[6/6] Starting inetd (rsh/rexec)..."
+echo "[6/8] Starting TFTP server..."
+/usr/sbin/in.tftpd -l -s /export -u root -c &
+sleep 1
+echo "✓ TFTP server started on port 69"
+echo "  TFTP root: /export"
+echo ""
+
+echo "[7/8] Starting NTP server..."
+ntpd -g -u ntp:ntp
+sleep 1
+echo "✓ NTP server started (serving time to VxWorks/RTEMS clients)"
+echo ""
+
+echo "[8/8] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
 echo "✓ inetd started"
@@ -215,14 +228,27 @@ EOF
 
 RUN chmod +x /start.sh
 
-EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp
+EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp 69/udp 123/udp
 
 
-# --- ADD rsh/rcp support ---
-  RUN apt-get update && apt-get install -y \
+# --- ADD rsh/rcp support and NTP/TFTP ---
+RUN apt-get update && apt-get install -y \
   openbsd-inetd \
   rsh-redone-server \
+  tftpd-hpa \
+  tftp-hpa \
+  ntp \
+  ntpdate \
   && rm -rf /var/lib/apt/lists/*
+
+# Configure NTP server to serve time to VxWorks/RTEMS clients
+RUN echo "# NTP Server Configuration" > /etc/ntp.conf && \
+    echo "driftfile /var/lib/ntp/ntp.drift" >> /etc/ntp.conf && \
+    echo "restrict default kod nomodify notrap nopeer noquery" >> /etc/ntp.conf && \
+    echo "restrict 127.0.0.1" >> /etc/ntp.conf && \
+    echo "restrict 10.0.0.0 mask 255.0.0.0 nomodify notrap" >> /etc/ntp.conf && \
+    echo "server 127.127.1.0" >> /etc/ntp.conf && \
+    echo "fudge 127.127.1.0 stratum 10" >> /etc/ntp.conf
 
 # add inetd services
 RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /etc/inetd.conf && \

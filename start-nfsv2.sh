@@ -109,6 +109,7 @@ docker run -d \
     --ip ${CONTAINER_IP} \
     --privileged \
     -v "/export:/export:rw" \
+    -v "/etc/localtime:/etc/localtime:ro" \
     --restart unless-stopped \
     ${FULL_IMAGE_NAME}
 
