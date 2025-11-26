@@ -23,15 +23,16 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
-# Check if /gem_sw exists on host
+# Create /gem_sw on host if it doesn't exist (using container)
 if [ ! -d "/gem_sw" ]; then
-    echo -e "${RED}ERROR: /gem_sw directory does not exist on host${NC}"
-    echo -e "${YELLOW}Please create /gem_sw and copy boot files:${NC}"
-    echo "  sudo mkdir -p /gem_sw"
-    echo "  sudo chmod 777 /gem_sw"
-    echo "  # Copy files from 10.2.71.12:/gem_sw"
-    echo ""
-    exit 1
+    echo -e "${YELLOW}Creating /gem_sw directory on host...${NC}"
+    docker run --rm --privileged -v /:/host ${FULL_IMAGE_NAME} sh -c "mkdir -p /host/gem_sw && chmod 777 /host/gem_sw"
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✓ Created /gem_sw on host${NC}"
+    else
+        echo -e "${RED}✗ Failed to create /gem_sw${NC}"
+        exit 1
+    fi
 else
     echo -e "${GREEN}✓ /gem_sw directory exists on host${NC}"
 fi
