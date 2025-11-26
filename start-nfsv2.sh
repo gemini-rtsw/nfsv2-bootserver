@@ -23,6 +23,13 @@ echo ""
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
+# GitLab registry configuration (needed early for directory creation)
+GITLAB_REGISTRY="registry.gitlab.com"
+GITLAB_PROJECT="nsf-noirlab/gemini/rtsw/nfsv2-bootserver"
+IMAGE_NAME="nfsv2"
+IMAGE_TAG="TCS"
+FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
+
 # Create /gem_sw on host if it doesn't exist (using container)
 if [ ! -d "/gem_sw" ]; then
     echo -e "${YELLOW}Creating /gem_sw directory on host...${NC}"
@@ -48,13 +55,6 @@ CONTAINER_IP="10.2.2.145"
 SUBNET="10.2.2.0/24"
 GATEWAY="10.2.2.1"
 PARENT_INTERFACE="ens33"
-
-# GitLab registry configuration
-GITLAB_REGISTRY="registry.gitlab.com"
-GITLAB_PROJECT="nsf-noirlab/gemini/rtsw/nfsv2-bootserver"
-IMAGE_NAME="nfsv2"
-IMAGE_TAG="TCS"
-FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
 
 # Create ipvlan network if it doesn't exist
 echo -e "${YELLOW}Checking ipvlan network...${NC}"
