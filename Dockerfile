@@ -186,16 +186,12 @@ cat /etc/exports
 echo ""
 
 echo "[6/7] Starting TFTP server..."
-# Create TFTP configuration (serves from /gem_sw, same as NFS)
-echo "TFTP_USERNAME=\"root\"" > /etc/default/tftpd-hpa
-echo "TFTP_DIRECTORY=\"/gem_sw\"" >> /etc/default/tftpd-hpa
-echo "TFTP_ADDRESS=\"0.0.0.0:69\"" >> /etc/default/tftpd-hpa
-echo "TFTP_OPTIONS=\"--secure --create\"" >> /etc/default/tftpd-hpa
-# Start TFTP server (serving from /gem_sw, same directory as NFS export)
-/usr/sbin/in.tftpd -l -s /gem_sw -u root -c &
+# Start TFTP server rooted at / so full paths like /gem_sw/prod/... work
+# The VME bootloader requests the full path /gem_sw/prod/redirector/tcs-mk-ioc
+/usr/sbin/in.tftpd -l -s / -u root -c &
 sleep 1
 echo "✓ TFTP server started on port 69"
-echo "  TFTP root: /gem_sw (same as NFS export)"
+echo "  TFTP root: / (full paths like /gem_sw/prod/... work)"
 echo ""
 
 echo "[7/7] Starting inetd (rsh/rexec)..."
