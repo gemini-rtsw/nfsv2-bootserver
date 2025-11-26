@@ -113,6 +113,7 @@ docker run -d \
     --ip ${CONTAINER_IP} \
     --privileged \
     -v "/gem_sw:/gem_sw:rw" \
+    -v "/etc/localtime:/etc/localtime:ro" \
     --restart unless-stopped \
     ${FULL_IMAGE_NAME}
 
