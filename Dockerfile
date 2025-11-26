@@ -109,6 +109,11 @@ if ! ip route | grep -q "10.2.49.0/24"; then
     echo "Adding route to 10.2.49.0/24 via 10.2.2.234..."
     ip route add 10.2.49.0/24 via 10.2.2.234 dev eth0 || echo "⚠ Warning: Could not add 10.2.49.x route"
 fi
+# Add route for 10.1.2.0/24 (RTEMS VME client 10.1.2.177)
+if ! ip route | grep -q "10.1.2.0/24"; then
+    echo "Adding route to 10.1.2.0/24 via 10.2.2.1..."
+    ip route add 10.1.2.0/24 via 10.2.2.1 dev eth0 || echo "⚠ Warning: Could not add 10.1.2.x route"
+fi
 echo "Current routes:"
 ip route
 echo "✓ Network routing configured"
@@ -194,10 +199,17 @@ echo "✓ TFTP server started on port 69"
 echo "  TFTP root: / (full paths like /gem_sw/prod/... work)"
 echo ""
 
-echo "[7/7] Starting inetd (rsh/rexec)..."
+echo "[7/8] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
 echo "✓ inetd started"
+echo ""
+
+echo "[8/8] Starting NTP server..."
+# Sync time from host first, then start NTP daemon
+ntpd -g -u ntp:ntp
+sleep 1
+echo "✓ NTP server started (serving time to RTEMS clients)"
 echo ""
 
 # Show debug info
@@ -237,14 +249,25 @@ EOF
 
 RUN chmod +x /start.sh
 
-EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp 69/udp
+EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp 69/udp 123/udp
 
 
 # --- ADD rsh/rcp support ---
-  RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y \
   openbsd-inetd \
   rsh-redone-server \
+  ntp \
+  ntpdate \
   && rm -rf /var/lib/apt/lists/*
+
+# Configure NTP server to serve time to clients
+RUN echo "# NTP Server Configuration for RTEMS VME clients" > /etc/ntp.conf && \
+    echo "driftfile /var/lib/ntp/ntp.drift" >> /etc/ntp.conf && \
+    echo "restrict default kod nomodify notrap nopeer noquery" >> /etc/ntp.conf && \
+    echo "restrict 127.0.0.1" >> /etc/ntp.conf && \
+    echo "restrict 10.0.0.0 mask 255.0.0.0 nomodify notrap" >> /etc/ntp.conf && \
+    echo "server 127.127.1.0" >> /etc/ntp.conf && \
+    echo "fudge 127.127.1.0 stratum 10" >> /etc/ntp.conf
 
 # add inetd services
 RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /etc/inetd.conf && \
