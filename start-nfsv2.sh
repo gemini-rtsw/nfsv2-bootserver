@@ -47,9 +47,9 @@ PARENT_INTERFACE="ens33"
 
 # GitLab registry configuration
 GITLAB_REGISTRY="registry.gitlab.com"
-GITLAB_PROJECT="hstecher/docker-nfsv2"
+GITLAB_PROJECT="nsf-noirlab/gemini/rtsw/nfsv2-bootserver"
 IMAGE_NAME="nfsv2"
-IMAGE_TAG="latest"
+IMAGE_TAG="altair"
 FULL_IMAGE_NAME="${GITLAB_REGISTRY}/${GITLAB_PROJECT}/${IMAGE_NAME}:${IMAGE_TAG}"
 
 # Create ipvlan network if it doesn't exist
