@@ -58,9 +58,10 @@ RUN apt-get update && \
 RUN mkdir -p /export && chmod 777 /export && \
     mkdir -p /var/log && chmod 755 /var/log
 
-# Copy exports config file
+# Copy exports config file (must be owned by root and not world-writable)
 COPY config/exports /etc/exports
-RUN echo "Exports configuration:" && \
+RUN chmod 644 /etc/exports && chown root:root /etc/exports && \
+    echo "Exports configuration:" && \
     cat /etc/exports
 
 # Create startup script
