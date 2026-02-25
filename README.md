@@ -92,6 +92,30 @@ docker run -d \
 - Network interface in promiscuous mode (`sudo ip link set <interface> promisc on`)
 - Available IP address on your network for the container (default: 10.2.2.147)
 
+## Adding a New VxWorks Client
+
+To allow a new VxWorks client to NFS mount, two files need to be updated and the image rebuilt:
+
+**1. `config/exports`** — grant NFS access:
+```
+/export 10.1.2.175(rw,no_root_squash)
+```
+
+**2. `config/.rhosts`** — grant rsh/rcp access:
+```
+10.1.2.175 gemvx
+```
+
+**3. Routing** — if the new client is on a subnet not already routed by the container, add a route in the `[2/6] Configuring network routing` section of the startup script in `Dockerfile`. For example, clients on `10.1.x.x` need:
+```bash
+ip route add 10.1.0.0/16 via 10.2.2.1 dev eth0
+```
+The `10.1.0.0/16` route via `10.2.2.1` is already present. If your client is on a different subnet, add the appropriate route using the same pattern.
+
+After editing, commit and push — the GitLab CI pipeline will rebuild and push the image automatically.
+
+> **Note:** rsh may work even without the routing fix because the client initiates the TCP connection outbound. NFS uses UDP where the *server* sends packets back to the client IP, so a missing return route will silently break NFS while rsh continues to work.
+
 ## How It Works
 
 This builds `nfs-user-server 2.2beta47` from source, which provides true NFSv2 support. The server runs in a Docker container with:
@@ -102,6 +126,7 @@ This builds `nfs-user-server 2.2beta47` from source, which provides true NFSv2 s
 - **Network**: IPVLAN mode with dedicated IP (10.2.2.147)
   - Uses same MAC address as host (switch-friendly)
   - Allows host to run NFSv3/4 simultaneously on different IP
+- **Routing**: Static routes added at startup for each client subnet (currently `10.2.49.0/24` and `10.1.0.0/16`)
 
 ## Verification
 
@@ -134,12 +159,13 @@ sudo ip link set ens33 promisc on
 ip link show ens33 | grep PROMISC
 ```
 
-**Can't mount from VxWorks**: 
+**Can't mount from VxWorks**:
 - Verify container IP: `docker inspect nfsv2-vxworks | grep IPAddress`
 - Check if container is reachable: `ping 10.2.2.147` (from VxWorks client)
 - Check RPC services: `docker exec nfsv2-vxworks rpcinfo -p localhost`
 - Verify client IP is in `config/exports`
 - Check debug logs: `docker exec nfsv2-vxworks tail -100 /var/log/mountd.log`
+- **rsh works but NFS doesn't**: The container is missing a return route to the client's subnet. Check `docker exec nfsv2-vxworks ip route` and add the missing subnet route in the Dockerfile startup script (see *Adding a New VxWorks Client* above).
 
 **Host cannot ping container**:
 - This is normal! IPVLAN containers cannot communicate with their host
