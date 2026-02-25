@@ -51,6 +51,7 @@ RUN apt-get update && \
     iftop \
     nload \
     sysstat \
+    inetutils-syslogd \
     && rm -rf /var/lib/apt/lists/*
 
 # Create export directory and log directory
@@ -115,36 +116,38 @@ ip route
 echo "✓ Network routing configured"
 echo ""
 
+# Start syslog (required by mountd/nfsd)
+echo "[3/8] Starting syslog..."
+syslogd || busybox syslogd || echo "⚠ Warning: Could not start syslogd"
+sleep 1
+echo "✓ syslog started"
+echo ""
+
 # Start rpcbind
-echo "[3/6] Starting rpcbind..."
+echo "[4/8] Starting rpcbind..."
 rpcbind -w
 sleep 2
 echo "✓ rpcbind started"
 echo ""
 
-# Start mountd with strace debugging (including RPC calls and all file operations)
-echo "[4/6] Starting rpc.mountd with strace logging..."
-strace -f -o /var/log/mountd.log -e trace=all -e verbose=all /usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1 &
-MOUNTD_PID=$!
-sleep 1
-if ps -p $MOUNTD_PID > /dev/null 2>&1; then
-    echo "✓ rpc.mountd started (PID: $MOUNTD_PID)"
-    echo "  Strace log: /var/log/mountd.log"
-    echo "  Stdout log: /var/log/mountd-stdout.log"
+# Start mountd
+echo "[5/8] Starting rpc.mountd..."
+/usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1
+sleep 2
+if pgrep -x rpc.mountd > /dev/null 2>&1; then
+    echo "✓ rpc.mountd started (PID: $(pgrep -x rpc.mountd))"
 else
     echo "⚠ Warning: mountd may have exited, check logs"
     cat /var/log/mountd-stdout.log 2>/dev/null || true
 fi
 echo ""
 
-# Start nfsd with debug logging
-echo "[5/6] Starting rpc.nfsd (NFSv2) with logging..."
-/usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1 &
-NFSD_PID=$!
+# Start nfsd
+echo "[6/8] Starting rpc.nfsd (NFSv2)..."
+/usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1
 sleep 2
-if ps -p $NFSD_PID > /dev/null 2>&1; then
-    echo "✓ rpc.nfsd started (PID: $NFSD_PID)"
-    echo "  Debug log: /var/log/nfsd.log"
+if pgrep -x rpc.nfsd > /dev/null 2>&1; then
+    echo "✓ rpc.nfsd started (PID: $(pgrep -x rpc.nfsd))"
 else
     echo "⚠ Warning: nfsd may have exited, check /var/log/nfsd.log"
     cat /var/log/nfsd.log 2>/dev/null || true
@@ -180,20 +183,20 @@ echo "Exports configuration:"
 cat /etc/exports
 echo ""
 
-echo "[6/8] Starting TFTP server..."
+echo "[7/8] Starting TFTP server..."
 /usr/sbin/in.tftpd -l -s /export -u root -c &
 sleep 1
 echo "✓ TFTP server started on port 69"
 echo "  TFTP root: /export"
 echo ""
 
-echo "[7/8] Starting NTP server..."
+echo "[8/8] Starting NTP server..."
 ntpd -g -u ntp:ntp
 sleep 1
 echo "✓ NTP server started (serving time to VxWorks/RTEMS clients)"
 echo ""
 
-echo "[8/8] Starting inetd (rsh/rexec)..."
+echo "[9/9] Starting inetd (rsh/rexec)..."
 /usr/sbin/inetd
 sleep 1
 echo "✓ inetd started"
@@ -203,12 +206,12 @@ echo ""
 echo "=========================================="
 echo "Debug Information"
 echo "=========================================="
-echo "Mountd strace log: /var/log/mountd.log"
-echo "Mountd stdout log: /var/log/mountd-stdout.log"
+echo "Syslog: /var/log/syslog"
+echo "Mountd log: /var/log/mountd-stdout.log"
 echo "NFSd log: /var/log/nfsd.log"
 echo ""
 echo "To monitor logs:"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd.log"
+echo "  docker exec nfsv2-vxworks tail -f /var/log/syslog"
 echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd-stdout.log"
 echo "  docker exec nfsv2-vxworks tail -f /var/log/nfsd.log"
 echo ""
