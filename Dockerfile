@@ -105,6 +105,11 @@ if ! ip route | grep -q "10.2.49.0/24"; then
     echo "Adding route to 10.2.49.0/24 via 10.2.2.234..."
     ip route add 10.2.49.0/24 via 10.2.2.234 dev eth0 || echo "⚠ Warning: Could not add 10.2.49.x route"
 fi
+# Add route for 10.1.0.0/16 (e.g. Altair VxWorks clients on 10.1.2.x)
+if ! ip route | grep -q "10.1.0.0/16"; then
+    echo "Adding route to 10.1.0.0/16 via 10.2.2.1..."
+    ip route add 10.1.0.0/16 via 10.2.2.1 dev eth0 || echo "⚠ Warning: Could not add 10.1.x route"
+fi
 echo "Current routes:"
 ip route
 echo "✓ Network routing configured"
