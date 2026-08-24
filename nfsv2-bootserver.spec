@@ -18,7 +18,11 @@ container and deployed by systemd.
 The container image is generic. Site configuration -- export paths, client
 lists, routes, container IP -- lives entirely in the variant subpackages
 below, so adding a client is a config edit and a restart, never a rebuild.
-Install exactly one variant per host.
+
+Install and enable exactly one variant per host. They deliberately do NOT
+Conflicts: each other -- they share no files, and the pipeline installs every
+subpackage it builds into one dev image, which a Conflicts: breaks. Nothing is
+started by installing both; only the unit you enable runs.
 
 %package tcs
 Summary:        NFSv2 boot server configuration for the TCS (RTEMS VME) host
@@ -26,7 +30,6 @@ Requires:       systemd
 # Docker itself is deliberately not a hard Requires: package names differ
 # between docker-ce and the distro's podman-docker, and a wrong name blocks
 # install. The unit declares Requires=docker.service, which is the real check.
-Conflicts:      %{name}-altair
 %description tcs
 Configuration and systemd unit for the TCS boot server: exports /gem_sw to the
 RTEMS VME clients and serves TFTP from / so the bootloader's absolute paths
@@ -38,7 +41,6 @@ Requires:       systemd
 # Docker itself is deliberately not a hard Requires: package names differ
 # between docker-ce and the distro's podman-docker, and a wrong name blocks
 # install. The unit declares Requires=docker.service, which is the real check.
-Conflicts:      %{name}-tcs
 %description altair
 Configuration and systemd unit for the Altair boot server: exports /export to
 the VxWorks clients and serves TFTP from the same directory.

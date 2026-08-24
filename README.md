@@ -27,7 +27,11 @@ each baking its own config into its own image tag, which made the two servers
 impossible to compare and left the deployed TCS config existing only inside a
 running container.
 
-Install exactly one variant per host; they `Conflicts:` each other.
+Install and enable exactly one variant per host. The two subpackages
+deliberately do **not** `Conflicts:` each other — they share no files, and the
+pipeline installs every subpackage it builds into a single dev image, which a
+`Conflicts:` breaks. Installing both starts nothing; only the unit you
+`systemctl enable` runs.
 
 ## Adding or changing a client
 
