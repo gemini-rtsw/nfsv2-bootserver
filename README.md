@@ -94,11 +94,18 @@ echo "<PAT>" | sudo -H docker login ghcr.io -u <user> --password-stdin
 and the unit still fails. (`su -` first is equivalent.) The PAT needs
 `read:packages`.
 
-This is not fatal on a running host: `ExecStartPre=-/usr/bin/docker pull` has a
-leading `-`, so a failed pull is ignored and the service starts on the image it
-already has. It *is* fatal on a fresh install, and it fails quietly on an
-upgrade — the host keeps running the old image while `rpm -q` reports the new
-version. If they disagree, check root's credential first:
+A missing or expired credential is not fatal to a *running* server:
+`ExecStartPre=-/usr/bin/docker pull` has a leading `-`, so a failed pull is
+ignored and the service keeps running the image it already has. It is fatal on
+a fresh install, and on the first restart after an upgrade — the unit pins a
+new `<version>-git<hash>` tag that is not in the local image store, so
+`docker run` cannot start it and systemd reports the unit failed. That is the
+intended behaviour: the alternative is a host quietly running something other
+than what `rpm -q` claims.
+
+Note that `dnf upgrade` alone does not restart the service (deliberately — see
+below), so between upgrade and restart `rpm -q` legitimately reports a newer
+version than the running container. Confirm with:
 
 ```bash
 rpm -q nfsv2-bootserver-tcs

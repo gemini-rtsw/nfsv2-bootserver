@@ -48,7 +48,12 @@ the VxWorks clients and serves TFTP from the same directory.
 
 %build
 for v in tcs altair; do
-  sed -e 's|@IMAGE@|%{appimage}:%{version}|g' \
+  # Pin the NVR-unique tag, not :%{version}. build_app_image.sh pushes both,
+  # but :%{version} is retagged by every build of the same version -- pinning
+  # it would mean `dnf downgrade` moves the RPM back while the host keeps
+  # pulling whatever last claimed that tag. :%{version}-git<hash> is 1:1 with
+  # the RPM NVR, so the unit names exactly one immutable image.
+  sed -e 's|@IMAGE@|%{appimage}:%{version}-git%{git_hash}|g' \
       -e "s|@VARIANT@|${v}|g" \
       deploy/%{name}.service.in > %{name}-${v}.service
   if grep -q '@IMAGE@\|@VARIANT@' %{name}-${v}.service; then

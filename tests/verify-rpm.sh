@@ -25,8 +25,10 @@ for v in tcs altair; do
   # The unit must pin a real version tag, never :latest -- otherwise `rpm -q`
   # stops telling you what the host actually runs.
   dir=$(directives "$unit")
-  grep -q 'Environment=IMAGE=ghcr.io/gemini-rtsw/nfsv2-bootserver:[0-9]' "$dir" \
-    || fail "$v: unit does not pin a versioned image"
+  # Must be the NVR-unique tag. A bare :<version> is retagged by every build
+  # of that version, which would make `dnf downgrade` a no-op for the image.
+  grep -qE 'Environment=IMAGE=ghcr\.io/gemini-rtsw/nfsv2-bootserver:[0-9][^-]*-git[0-9a-z]+$' "$dir" \
+    || fail "$v: unit does not pin an NVR-unique <version>-git<hash> image tag"
   refute ':latest'            "$dir" "$v: unit pins :latest"
   refute '@IMAGE@\|@VARIANT@' "$dir" "$v: unsubstituted placeholder in unit"
 
