@@ -79,9 +79,35 @@ rpm -q nfsv2-bootserver-tcs                # what is actually deployed
 
 `dnf downgrade` is a real rollback: the older RPM's unit pins the older image.
 
-**Root must be able to pull the image** — the unit runs `docker pull` as root,
-not as you. Easiest is to make the GHCR package public; otherwise see the
-[CI README](https://github.com/gemini-rtsw/gemini-rtsw-ci#shipping-a-container-by-rpm).
+### Root must be logged in to GHCR
+
+The unit runs `docker pull` as **root**, not as you. The `gemini-rtsw` org
+disables both Public and Internal package visibility, so this package is
+necessarily Private and there is no credential-free path — root needs a token
+on every boot server, once:
+
+```bash
+echo "<PAT>" | sudo -H docker login ghcr.io -u <user> --password-stdin
+```
+
+`-H` forces `HOME=/root`. Without it sudo may keep your `HOME`, report success,
+and the unit still fails. (`su -` first is equivalent.) The PAT needs
+`read:packages`.
+
+This is not fatal on a running host: `ExecStartPre=-/usr/bin/docker pull` has a
+leading `-`, so a failed pull is ignored and the service starts on the image it
+already has. It *is* fatal on a fresh install, and it fails quietly on an
+upgrade — the host keeps running the old image while `rpm -q` reports the new
+version. If they disagree, check root's credential first:
+
+```bash
+rpm -q nfsv2-bootserver-tcs
+sudo docker images ghcr.io/gemini-rtsw/nfsv2-bootserver
+sudo journalctl -u nfsv2-bootserver-tcs | grep -i 'denied\|unauthorized'
+```
+
+Use a PAT with a long expiry, and note the renewal date somewhere — an expired
+token turns every future upgrade into a silent no-op.
 
 ## Layout
 
