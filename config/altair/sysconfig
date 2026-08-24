@@ -1,0 +1,18 @@
+# Altair boot server — host settings. Survives RPM upgrades (%config(noreplace)).
+#
+# Read by BOTH systemd (EnvironmentFile=) and docker (--env-file). docker's
+# --env-file does NOT strip quotes, so never quote a value here.
+
+NFS_EXPORT_DIR=/export
+TFTP_ROOT=/export
+
+VARIANT_LABEL=Altair / VxWorks
+
+# CIDR:GATEWAY pairs, space separated.
+EXTRA_ROUTES=10.2.49.0/24:10.2.2.234 10.1.0.0/16:10.2.2.1
+
+CONTAINER_IP=10.2.2.147
+NETWORK_NAME=nfs-ipvlan
+NETWORK_SUBNET=10.2.2.0/24
+NETWORK_GATEWAY=10.2.2.1
+PARENT_INTERFACE=ens33

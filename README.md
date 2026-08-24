@@ -1,180 +1,130 @@
-# NFSv2 Server for VxWorks Boot
+# nfsv2-bootserver
 
-A working NFSv2 user-space server for booting legacy VxWorks systems. Built from `nfs-user-server 2.2beta47` source.
+NFSv2 + TFTP + NTP + rsh boot server for the legacy VxWorks and RTEMS VME
+crates at Gemini North. Ships as a container image; deployed by RPM + systemd
+through the [gemini-rtsw-ci](https://github.com/gemini-rtsw/gemini-rtsw-ci)
+pipeline.
 
-## Quick Start (Linux)
+The NFS server is `nfs-user-server 2.2beta47`, vendored in this repo. It is the
+only NFSv2 implementation these clients still talk to, which is why it is built
+from a checked-in tarball rather than a package.
 
-### Prerequisites
+## Two servers, one image
 
-Enable promiscuous mode on your network interface (required for IPVLAN):
+| | TCS | Altair |
+|---|---|---|
+| host | `mkotcsboot-lv1` | Altair boot host |
+| clients | RTEMS VME | VxWorks |
+| NFS export | `/gem_sw` | `/export` |
+| TFTP root | `/` (bootloader sends absolute paths) | `/export` |
+| container IP | 10.2.2.145 | 10.2.2.147 |
+| RPM | `nfsv2-bootserver-tcs` | `nfsv2-bootserver-altair` |
 
-```bash
-# Enable promiscuous mode (replace ens33 with your interface name)
-sudo ip link set ens33 promisc on
+**The image is generic — it contains no site configuration.** Export paths,
+client lists, routes and the container IP all come from the variant's RPM at
+runtime. This replaces the old arrangement of a `main` and a `tcs-main` branch
+each baking its own config into its own image tag, which made the two servers
+impossible to compare and left the deployed TCS config existing only inside a
+running container.
 
-# Verify it's enabled (should see PROMISC in the flags)
-ip link show ens33
-```
+Install exactly one variant per host; they `Conflicts:` each other.
 
-### Start the Server
+## Adding or changing a client
 
-```bash
-# Start the NFSv2 server
-./start-nfsv2.sh
-
-# Check status
-./status-nfsv2.sh
-
-# Stop the server
-./stop-nfsv2.sh
-```
-
-The startup script will:
-- Build/pull the Docker image (first time only)
-- Create the `vxworks-files/` directory
-- Create an IPVLAN network
-- Start the NFSv2 server with IP 10.2.2.147
-- Display your server IP and VxWorks mount command
-
-## VxWorks Mount
-
-From your VxWorks shell, mount from the container IP (10.2.2.147):
-
-```
--> nfsMount("10.2.2.147", "/export", "/tgtsvr")
-```
-
-If you changed the container IP in `start-nfsv2.sh`, use that IP instead.
-
-## File Management
-
-Place your VxWorks boot files in the `vxworks-files/` directory:
+No rebuild. Edit the config on the host and restart:
 
 ```bash
-cp /path/to/vxWorks vxworks-files/
-cp /path/to/bootrom.bin vxworks-files/
+sudoedit /etc/nfsv2-bootserver/tcs/exports     # or .../altair/exports
+sudoedit /etc/nfsv2-bootserver/tcs/rhosts
+sudo systemctl restart nfsv2-bootserver-tcs
 ```
 
-These files will be accessible from VxWorks at `/tgtsvr/`
+Both files are `%config(noreplace)`, so hand edits survive `dnf upgrade`. Push
+the same edit to this repo so a fresh install starts from the right list.
 
-## Manual Docker Build
+> **One export path per line.** `nfs-user-server` takes the *first* line for a
+> given path and ignores later ones, so a second `/gem_sw ...` line silently
+> grants nothing. Put every client for a path on that path's single line. CI
+> rejects a config that splits a path (`tests/verify-rpm.sh`).
 
-If you want to build/run manually:
+> **`/etc/exports` must be root-owned and not world-writable**, or `rpc.mountd`
+> refuses to serve. The RPM installs it `root:root 0644`; the bind mount
+> carries that through to the container. The entrypoint warns loudly if it
+> ever isn't.
+
+Host-specific settings — container IP, routes, interface — live in
+`/etc/sysconfig/nfsv2-bootserver-<variant>`, also `noreplace`.
+
+> That file is read by **both** systemd and `docker --env-file`. `--env-file`
+> does not strip quotes, so values must be unquoted: `VARIANT_LABEL=TCS / RTEMS
+> VME`, never `VARIANT_LABEL="TCS / RTEMS VME"`.
+
+## Deploying
 
 ```bash
-# Build the image
-docker build -t nfsv2:working .
-
-# Create IPVLAN network
-docker network create -d ipvlan \
-    --subnet=10.2.2.0/24 \
-    --gateway=10.2.2.1 \
-    -o parent=ens33 \
-    -o ipvlan_mode=l2 \
-    nfs-ipvlan
-
-# Run the container
-docker run -d \
-    --name nfsv2-vxworks \
-    --network nfs-ipvlan \
-    --ip 10.2.2.147 \
-    --privileged \
-    -v /export:/export:rw \
-    -v $(pwd)/config:/home/gemvx/config:rw \
-    --restart unless-stopped \
-    nfsv2:working
+sudo dnf install nfsv2-bootserver-tcs      # or -altair
+sudo systemctl enable --now nfsv2-bootserver-tcs
+systemctl status nfsv2-bootserver-tcs
+journalctl -u nfsv2-bootserver-tcs -f      # the entrypoint's startup report
 ```
 
-## Requirements
+Upgrades move the host to a new image, because the unit carries the version tag
+and is deliberately not a config file:
 
-- Docker
-- Linux host with IPVLAN support
-- Network interface in promiscuous mode (`sudo ip link set <interface> promisc on`)
-- Available IP address on your network for the container (default: 10.2.2.147)
-
-## Adding a New VxWorks Client
-
-To allow a new VxWorks client to NFS mount, two files need to be updated and the image rebuilt:
-
-**1. `config/exports`** — grant NFS access:
-```
-/export 10.1.2.175(rw,no_root_squash)
-```
-
-**2. `config/.rhosts`** — grant rsh/rcp access:
-```
-10.1.2.175 gemvx
-```
-
-**3. Routing** — if the new client is on a subnet not already routed by the container, add a route in the `[2/6] Configuring network routing` section of the startup script in `Dockerfile`. For example, clients on `10.1.x.x` need:
 ```bash
-ip route add 10.1.0.0/16 via 10.2.2.1 dev eth0
-```
-The `10.1.0.0/16` route via `10.2.2.1` is already present. If your client is on a different subnet, add the appropriate route using the same pattern.
-
-After editing, commit and push — the GitLab CI pipeline will rebuild and push the image automatically.
-
-> **Note:** rsh may work even without the routing fix because the client initiates the TCP connection outbound. NFS uses UDP where the *server* sends packets back to the client IP, so a missing return route will silently break NFS while rsh continues to work.
-
-## How It Works
-
-This builds `nfs-user-server 2.2beta47` from source, which provides true NFSv2 support. The server runs in a Docker container with:
-
-- **Protocol**: NFSv2 (required for old VxWorks systems)
-- **Export**: `/export` → mapped to host's `/export` directory
-- **Permissions**: `rw,no_root_squash` per client IP (configured in `config/exports`)
-- **Network**: IPVLAN mode with dedicated IP (10.2.2.147)
-  - Uses same MAC address as host (switch-friendly)
-  - Allows host to run NFSv3/4 simultaneously on different IP
-- **Routing**: Static routes added at startup for each client subnet (currently `10.2.49.0/24` and `10.1.0.0/16`)
-
-## Verification
-
-The startup script shows RPC services. You should see:
-
-```
-100003    2   udp   2049  nfs
-100003    2   tcp   2049  nfs
+sudo dnf upgrade nfsv2-bootserver-tcs
+sudo systemctl restart nfsv2-bootserver-tcs
+rpm -q nfsv2-bootserver-tcs                # what is actually deployed
 ```
 
-The `2` in the second column indicates NFSv2.
+`dnf downgrade` is a real rollback: the older RPM's unit pins the older image.
 
-## Technical Notes
+**Root must be able to pull the image** — the unit runs `docker pull` as root,
+not as you. Easiest is to make the GHCR package public; otherwise see the
+[CI README](https://github.com/gemini-rtsw/gemini-rtsw-ci#shipping-a-container-by-rpm).
 
-- Modern Linux kernels have removed NFSv2 client support, so you cannot test mounting from a modern Linux client
-- VxWorks has its own NFSv2 client implementation that works with this server
-- The server uses IPVLAN networking to avoid port conflicts with host NFS
-- Host can run NFSv3/4 kernel NFS on a different IP simultaneously (see `SETUP-HOST-NFS.md`)
-- IPVLAN requires promiscuous mode on the parent interface
-- Container shares the host's MAC address but has its own IP
+## Layout
 
-## Troubleshooting
+```
+Dockerfile                  generic image; no site config
+scripts/start.sh            entrypoint, fully env-driven
+config/{tcs,altair}/        exports, rhosts, sysconfig per variant
+deploy/*.service.in         systemd unit template (@IMAGE@, @VARIANT@)
+nfsv2-bootserver.spec       one spec, two subpackages
+tests/verify-rpm.sh         CI checks: image pin, export syntax, %config flags
+```
 
-**Cannot ping container from external machines**:
+## Building locally
+
 ```bash
-# Enable promiscuous mode on parent interface
-sudo ip link set ens33 promisc on
-
-# Verify it's enabled
-ip link show ens33 | grep PROMISC
+./gemini-rtsw-ci/build_rpm.sh --profile lightweight --el 9
+./gemini-rtsw-ci/build_app_image.sh --no-push
+./tests/verify-rpm.sh
 ```
 
-**Can't mount from VxWorks**:
-- Verify container IP: `docker inspect nfsv2-vxworks | grep IPAddress`
-- Check if container is reachable: `ping 10.2.2.147` (from VxWorks client)
-- Check RPC services: `docker exec nfsv2-vxworks rpcinfo -p localhost`
-- Verify client IP is in `config/exports`
-- Check debug logs: `docker exec nfsv2-vxworks tail -100 /var/log/mountd.log`
-- **rsh works but NFS doesn't**: The container is missing a return route to the client's subnet. Check `docker exec nfsv2-vxworks ip route` and add the missing subnet route in the Dockerfile startup script (see *Adding a New VxWorks Client* above).
+## The Debian base is pinned, deliberately
 
-**Host cannot ping container**:
-- This is normal! IPVLAN containers cannot communicate with their host
-- Use `docker exec` to access the container instead
+`FROM debian:bullseye-20250203`, with `apt` frozen to a `snapshot.debian.org`
+timestamp. Bullseye leaves LTS in August 2026; after it moves to
+`archive.debian.org` an unpinned `apt-get update` fails and the image cannot be
+rebuilt at all. The pin keeps the build reproducible past that date.
 
-**Need to see logs**:
-```bash
-docker logs -f nfsv2-vxworks
-docker exec nfsv2-vxworks tail -f /var/log/mountd.log
-```
+`snapshot.debian.org` is rate-limited and occasionally slow — fine for the
+occasional rebuild this repo needs. If it becomes a problem,
+`http://archive.debian.org/debian bullseye main` is the stable alternative at
+the cost of getting final-LTS package versions rather than a specific date.
 
-**Run both NFSv2 and NFSv3/4**: See `SETUP-HOST-NFS.md` for details.
+## History
+
+Before August 2026 this repo had two divergent branches (`main` for Altair,
+`tcs-main` for TCS) and pushed images to a now-archived GitLab registry. Both
+are superseded by this layout. The old branches are kept for reference:
+
+| branch | last commit | shipped as |
+|---|---|---|
+| `main` (old) | `1dfd4a7` | `nfsv2:altair` |
+| `tcs-main` | `d5d291e` | `nfsv2:TCS` |
+
+The TCS server ran image `ac88a1c4ab92`, built from the `5d1a67e` tree.
+`EXECUTIVE_SUMMARY_Boot_Server_Issues_Dec2025.md` on `tcs-main` documents the
+December 2025 investigation.

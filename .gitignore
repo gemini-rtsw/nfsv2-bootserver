@@ -1,16 +1,2 @@
-# VxWorks files directory
-vxworks-files/
-
-# Test mount point
-mnt/
-
-# Docker
-.dockerignore
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
+rpms/
+*.rpm

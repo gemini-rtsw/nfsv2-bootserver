@@ -1,26 +1,41 @@
-# NFSv2 User Space Server - WORKING BUILD
-# Uses nfs-user-server 2.2beta47 from Debian archive
+# NFSv2 user-space boot server for VxWorks / RTEMS VME clients.
+#
+# This image is GENERIC: it contains no site configuration. The TCS and Altair
+# boot servers run the same image and differ only in the environment and the
+# bind-mounted /etc/exports and /home/gemvx/.rhosts supplied by their RPM.
+#
+# The base is pinned to a dated tag on purpose. Debian bullseye reaches end of
+# LTS in Aug 2026; once it moves to archive.debian.org an unpinned
+# `apt-get update` starts failing and this image can no longer be rebuilt.
+# --platform is pinned, not inherited: both boot servers are x86_64, and a
+# build on an Apple Silicon laptop would otherwise produce an arm64 image that
+# installs fine and then cannot run on either host. build_app_image.sh
+# deliberately passes no --platform of its own so this line wins.
+FROM --platform=linux/amd64 debian:bullseye-20250203
 
-FROM debian:bullseye 
+# Freeze apt at a snapshot so the build stays reproducible after bullseye is
+# archived. check-valid-until=no is required: archived Release files are
+# expired and apt refuses them otherwise.
+#
+# http, not https: the base image ships no ca-certificates, so an https source
+# cannot be used to install the package that would make https work. Integrity
+# does not depend on the transport here -- apt verifies the Release signature
+# against the debian-archive-keyring already in the image.
+RUN printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20250201T000000Z bullseye main\n\
+deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20250201T000000Z bullseye-security main\n' \
+      > /etc/apt/sources.list && \
+    echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80retries
 
-# Install build dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    gcc \
-    make \
-    flex \
-    bison \
-    libc6-dev \
-    strace \
-    tcpdump \
+    build-essential gcc make flex bison libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy local nfs-user-server source
+# nfs-user-server 2.2beta47, vendored. This is the one component that must NOT
+# drift: it is the only NFSv2 server that still speaks to these VME clients.
 WORKDIR /usr/src
 COPY nfs-user-server_2.2beta47.orig.tar.gz .
 RUN tar -xzf nfs-user-server_2.2beta47.orig.tar.gz
 
-# Build nfs-user-server
 WORKDIR /usr/src/nfs-server-2.2beta47
 RUN ./configure --prefix=/usr/local && \
     touch site.mk && \
@@ -32,226 +47,20 @@ RUN ./configure --prefix=/usr/local && \
     make && \
     make install
 
-# Install runtime dependencies and network debugging tools
-RUN apt-get update && \
-    apt-get install -y \
-    rpcbind \
-    netbase \
-    procps \
-    libtirpc-common \
-    iputils-ping \
-    traceroute \
-    iproute2 \
-    net-tools \
-    dnsutils \
-    curl \
-    wget \
-    netcat \
-    telnet \
-    iftop \
-    nload \
-    sysstat \
-    inetutils-syslogd \
+# Runtime: NFS/TFTP/NTP/rsh plus the diagnostic tools this server has always
+# carried (these boxes are on a closed network; there is no installing them later).
+RUN apt-get update && apt-get install -y \
+    rpcbind netbase procps libtirpc-common \
+    iputils-ping traceroute iproute2 net-tools dnsutils \
+    curl wget netcat telnet strace tcpdump \
+    iftop nload sysstat inetutils-syslogd \
+    tftpd-hpa tftp-hpa ntp ntpdate \
+    openbsd-inetd rsh-redone-server \
     && rm -rf /var/lib/apt/lists/*
 
-# Create export directory and log directory
-RUN mkdir -p /export && chmod 777 /export && \
-    mkdir -p /var/log && chmod 755 /var/log
+RUN mkdir -p /var/log && chmod 755 /var/log
 
-# Copy exports config file (must be owned by root and not world-writable)
-COPY config/exports /etc/exports
-RUN chmod 644 /etc/exports && chown root:root /etc/exports && \
-    echo "Exports configuration:" && \
-    cat /etc/exports
-
-# Create startup script
-COPY <<EOF /start.sh
-#!/bin/bash
-set -e
-
-echo "=========================================="
-echo "Starting NFSv2 User-Space Server"
-echo "=========================================="
-echo ""
-
-echo "[0/6] Setting ulimit -n 65536..."
-ulimit -n 65536
-echo "✓ ulimit -n 65536"
-echo ""
-
-# Tune network buffers for reliability (optional, requires --privileged or --sysctl)
-echo "[1/6] Tuning network parameters..."
-sysctl -w net.core.rmem_max=16777216 2>/dev/null || echo "  ⚠ Warning: Cannot set rmem_max (needs --privileged)"
-sysctl -w net.core.wmem_max=16777216 2>/dev/null || true
-sysctl -w net.core.rmem_default=262144 2>/dev/null || true
-sysctl -w net.core.wmem_default=262144 2>/dev/null || true
-sysctl -w net.ipv4.tcp_rmem="4096 87380 16777216" 2>/dev/null || true
-sysctl -w net.ipv4.tcp_wmem="4096 65536 16777216" 2>/dev/null || true
-sysctl -w net.ipv4.tcp_window_scaling=1 2>/dev/null || true
-sysctl -w net.ipv4.tcp_timestamps=1 2>/dev/null || true
-sysctl -w net.ipv4.tcp_keepalive_time=60 2>/dev/null || true
-sysctl -w net.ipv4.tcp_keepalive_intvl=10 2>/dev/null || true
-sysctl -w net.ipv4.tcp_keepalive_probes=6 2>/dev/null || true
-echo "✓ Network tuning attempted (may require --privileged for full effect)"
-echo ""
-
-# Configure network routing
-echo "[2/6] Configuring network routing..."
-# Add default route if it doesn't exist
-if ! ip route | grep -q default; then
-    echo "Adding default route via 10.2.2.1..."
-    ip route add default via 10.2.2.1 dev eth0 || echo "⚠ Warning: Could not add default route"
-fi
-# Add specific route for 10.2.49.0/24 via 10.2.2.234
-if ! ip route | grep -q "10.2.49.0/24"; then
-    echo "Adding route to 10.2.49.0/24 via 10.2.2.234..."
-    ip route add 10.2.49.0/24 via 10.2.2.234 dev eth0 || echo "⚠ Warning: Could not add 10.2.49.x route"
-fi
-# Add route for 10.1.0.0/16 (e.g. Altair VxWorks clients on 10.1.2.x)
-if ! ip route | grep -q "10.1.0.0/16"; then
-    echo "Adding route to 10.1.0.0/16 via 10.2.2.1..."
-    ip route add 10.1.0.0/16 via 10.2.2.1 dev eth0 || echo "⚠ Warning: Could not add 10.1.x route"
-fi
-echo "Current routes:"
-ip route
-echo "✓ Network routing configured"
-echo ""
-
-# Start syslog (required by mountd/nfsd)
-echo "[3/8] Starting syslog..."
-syslogd || busybox syslogd || echo "⚠ Warning: Could not start syslogd"
-sleep 1
-echo "✓ syslog started"
-echo ""
-
-# Start rpcbind
-echo "[4/8] Starting rpcbind..."
-rpcbind -w
-sleep 2
-echo "✓ rpcbind started"
-echo ""
-
-# Start mountd
-echo "[5/8] Starting rpc.mountd..."
-/usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1
-sleep 2
-if pgrep -x rpc.mountd > /dev/null 2>&1; then
-    echo "✓ rpc.mountd started (PID: $(pgrep -x rpc.mountd))"
-else
-    echo "⚠ Warning: mountd may have exited, check logs"
-    cat /var/log/mountd-stdout.log 2>/dev/null || true
-fi
-echo ""
-
-# Start nfsd
-echo "[6/8] Starting rpc.nfsd (NFSv2)..."
-/usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1
-sleep 2
-if pgrep -x rpc.nfsd > /dev/null 2>&1; then
-    echo "✓ rpc.nfsd started (PID: $(pgrep -x rpc.nfsd))"
-else
-    echo "⚠ Warning: nfsd may have exited, check /var/log/nfsd.log"
-    cat /var/log/nfsd.log 2>/dev/null || true
-fi
-echo ""
-
-# Show registered services
-echo "=========================================="
-echo "Registered RPC Services:"
-echo "=========================================="
-rpcinfo -p localhost
-echo ""
-
-echo "=========================================="
-echo "NFSv2 Server Ready!"
-echo "=========================================="
-echo "Export: /export"
-echo "Protocol: NFSv2"
-echo ""
-echo "To mount from VxWorks:"
-echo '  mount "<host-ip>", "/export", "/tgtsvr"'
-echo ""
-echo "To test from Linux (if NFSv2 supported):"
-echo '  mount -t nfs -o vers=2 <host-ip>:/export /mnt/test'
-echo "=========================================="
-echo ""
-
-echo "Configuration files loaded from image:"
-echo "  - /etc/exports (NFS exports)"
-echo "  - /home/gemvx/.rhosts (gemvx user access)"
-echo ""
-echo "Exports configuration:"
-cat /etc/exports
-echo ""
-
-echo "[7/8] Starting TFTP server..."
-/usr/sbin/in.tftpd -l -s /export -u root -c &
-sleep 1
-echo "✓ TFTP server started on port 69"
-echo "  TFTP root: /export"
-echo ""
-
-echo "[8/8] Starting NTP server..."
-ntpd -g -u ntp:ntp
-sleep 1
-echo "✓ NTP server started (serving time to VxWorks/RTEMS clients)"
-echo ""
-
-echo "[9/9] Starting inetd (rsh/rexec)..."
-/usr/sbin/inetd
-sleep 1
-echo "✓ inetd started"
-echo ""
-
-# Show debug info
-echo "=========================================="
-echo "Debug Information"
-echo "=========================================="
-echo "Syslog: /var/log/syslog"
-echo "Mountd log: /var/log/mountd-stdout.log"
-echo "NFSd log: /var/log/nfsd.log"
-echo ""
-echo "To monitor logs:"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/syslog"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/mountd-stdout.log"
-echo "  docker exec nfsv2-vxworks tail -f /var/log/nfsd.log"
-echo ""
-
-# Verify mount path exists and show permissions
-echo "Checking export path permissions..."
-if [ -d /export/gemini/altair/V3-7gate ]; then
-    echo "✓ Path exists: /export/gemini/altair/V3-7gate"
-    ls -ld /export/gemini/altair/V3-7gate
-    echo "  Permissions: $(stat -c '%a' /export/gemini/altair/V3-7gate 2>/dev/null || stat -f '%A' /export/gemini/altair/V3-7gate)"
-else
-    echo "⚠ Path does not exist: /export/gemini/altair/V3-7gate"
-    echo "  Creating parent directories..."
-    mkdir -p /export/gemini/altair/V3-7gate
-    chmod -R 777 /export/gemini
-    echo "✓ Created and set permissions"
-fi
-echo ""
-
-tail -f /dev/null
-EOF
-
-RUN chmod +x /start.sh
-
-EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp 69/udp 123/udp
-
-
-# --- ADD rsh/rcp support and NTP/TFTP ---
-RUN apt-get update && apt-get install -y \
-  openbsd-inetd \
-  rsh-redone-server \
-  tftpd-hpa \
-  tftp-hpa \
-  ntp \
-  ntpdate \
-  && rm -rf /var/lib/apt/lists/*
-
-# Configure NTP server to serve time to VxWorks/RTEMS clients
-RUN echo "# NTP Server Configuration" > /etc/ntp.conf && \
+RUN echo "# NTP server configuration for VxWorks/RTEMS clients" > /etc/ntp.conf && \
     echo "driftfile /var/lib/ntp/ntp.drift" >> /etc/ntp.conf && \
     echo "restrict default kod nomodify notrap nopeer noquery" >> /etc/ntp.conf && \
     echo "restrict 127.0.0.1" >> /etc/ntp.conf && \
@@ -259,23 +68,23 @@ RUN echo "# NTP Server Configuration" > /etc/ntp.conf && \
     echo "server 127.127.1.0" >> /etc/ntp.conf && \
     echo "fudge 127.127.1.0 stratum 10" >> /etc/ntp.conf
 
-# add inetd services
 RUN printf "shell\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rshd\tin.rshd\n" >> /etc/inetd.conf && \
-  printf "exec\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rexecd\tin.rexecd\n" >> /etc/inetd.conf
+    printf "exec\tstream\ttcp\tnowait\troot\t/usr/sbin/in.rexecd\tin.rexecd\n" >> /etc/inetd.conf
 
-# create user and trust 10.x.x.x
+# uid 2966 must match the gemvx uid on the VME clients, or rsh/rcp maps to the
+# wrong user and file ownership on the export goes wrong.
 RUN useradd -u 2966 -m -s /bin/bash gemvx
 
-# Copy .rhosts for gemvx user
-COPY config/.rhosts /home/gemvx/.rhosts
-RUN chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
+# Placeholders only. Both are bind-mounted over by the systemd unit; an image
+# that shipped a real client list would put site config back inside the build.
+RUN echo "# placeholder - bind-mounted by the RPM's systemd unit" > /etc/exports && \
+    chmod 644 /etc/exports && chown root:root /etc/exports && \
+    : > /home/gemvx/.rhosts && \
+    chown gemvx:gemvx /home/gemvx/.rhosts && chmod 600 /home/gemvx/.rhosts
 
-# expose rsh/rexec ports
-EXPOSE 512/tcp 514/tcp
+COPY scripts/start.sh /start.sh
+RUN chmod +x /start.sh
 
-RUN ln -s /export/gemini /gemini
+EXPOSE 111/tcp 111/udp 2049/tcp 2049/udp 69/udp 123/udp 512/tcp 514/tcp
 
-
-VOLUME ["/export"]
 CMD ["/start.sh"]
-

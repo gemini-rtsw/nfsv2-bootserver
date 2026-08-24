@@ -1,0 +1,54 @@
+[Unit]
+Description=NFSv2 boot server (@VARIANT@) for VME clients
+Documentation=https://github.com/gemini-rtsw/nfsv2-bootserver
+After=docker.service network-online.target
+Requires=docker.service
+Wants=network-online.target
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=0
+
+# Pinned to the release version, never :latest, so `rpm -q` tells you what runs
+# and a reboot cannot silently change it.
+Environment=IMAGE=@IMAGE@
+Environment=CONTAINER=nfsv2-@VARIANT@
+EnvironmentFile=/etc/sysconfig/nfsv2-bootserver-@VARIANT@
+
+# Best-effort pull: a registry outage must not stop a working local image.
+# This matters more here than usual -- these boot servers are the thing VME
+# crates need in order to boot at all.
+ExecStartPre=-/usr/bin/docker pull ${IMAGE}
+ExecStartPre=-/usr/bin/docker rm -f ${CONTAINER}
+
+# The ipvlan network gives the container its own IP on the client VLAN while
+# leaving the host's rpcbind alone. Created on demand so a fresh host works.
+ExecStartPre=-/bin/sh -c '/usr/bin/docker network inspect ${NETWORK_NAME} >/dev/null 2>&1 || \
+  /usr/bin/docker network create -d ipvlan \
+    --subnet=${NETWORK_SUBNET} --gateway=${NETWORK_GATEWAY} \
+    -o parent=${PARENT_INTERFACE} ${NETWORK_NAME}'
+
+# 0777: VME clients write here as assorted uids over NFSv2 (no_root_squash).
+ExecStartPre=/usr/bin/install -d -m 0777 ${NFS_EXPORT_DIR}
+
+# --privileged is required, not incidental: the entrypoint sets sysctls and
+# adds routes for the client VLANs. --read-only and --cap-drop ALL from the
+# standard template are therefore not usable here.
+#
+# Foreground `docker run --rm`, deliberately NOT --restart=always: systemd owns
+# the lifecycle. With both, `systemctl stop` leaves the container running.
+ExecStart=/usr/bin/docker run --rm --name ${CONTAINER} \
+  --privileged \
+  --network ${NETWORK_NAME} --ip ${CONTAINER_IP} \
+  --env-file /etc/sysconfig/nfsv2-bootserver-@VARIANT@ \
+  -v ${NFS_EXPORT_DIR}:${NFS_EXPORT_DIR}:rw \
+  -v /etc/nfsv2-bootserver/@VARIANT@/exports:/etc/exports:ro \
+  -v /etc/nfsv2-bootserver/@VARIANT@/rhosts:/home/gemvx/.rhosts:ro \
+  -v /etc/localtime:/etc/localtime:ro \
+  ${IMAGE}
+
+ExecStop=/usr/bin/docker stop -t 10 ${CONTAINER}
+
+[Install]
+WantedBy=multi-user.target

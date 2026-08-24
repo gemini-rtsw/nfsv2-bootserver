@@ -1,0 +1,21 @@
+# TCS boot server — host settings. Survives RPM upgrades (%config(noreplace)).
+#
+# Read by BOTH systemd (EnvironmentFile=) and docker (--env-file). docker's
+# --env-file does NOT strip quotes, so never quote a value here.
+
+NFS_EXPORT_DIR=/gem_sw
+
+# TFTP is rooted at / because the VME bootloader requests the full path
+# /gem_sw/prod/redirector/tcs-mk-ioc, not a path relative to the export.
+TFTP_ROOT=/
+
+VARIANT_LABEL=TCS / RTEMS VME
+
+# CIDR:GATEWAY pairs, space separated.
+EXTRA_ROUTES=10.2.49.0/24:10.2.2.234 10.1.2.0/24:10.2.2.1
+
+CONTAINER_IP=10.2.2.145
+NETWORK_NAME=nfs-ipvlan
+NETWORK_SUBNET=10.2.2.0/24
+NETWORK_GATEWAY=10.2.2.1
+PARENT_INTERFACE=ens33

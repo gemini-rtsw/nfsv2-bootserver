@@ -1,4 +1,5 @@
-# NFS Exports Configuration
-# All clients on one line per export path
-
+# NFS exports — Altair boot server, VxWorks clients.
+#
+# nfs-user-server wants ONE line per export path with all clients on it.
+# Splitting a path across several lines makes the later lines ineffective.
 /export 10.2.2.233(rw,no_root_squash) 10.2.2.234(rw,no_root_squash) 10.2.2.235(rw,no_root_squash) 10.2.2.236(rw,no_root_squash) 10.2.49.12(rw,no_root_squash) 10.2.49.13(rw,no_root_squash) 10.2.49.15(rw,no_root_squash) 10.1.44.53(rw,no_root_squash) 10.2.2.238(rw,no_root_squash) 10.1.2.175(rw,no_root_squash)
