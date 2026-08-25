@@ -42,7 +42,7 @@ echo ""
 # 1024 is low for a crate-boot storm. The running TCS server has always set it.
 ulimit -n 65536 || echo "  ⚠ Could not raise file descriptor limit"
 
-echo "[1/8] Tuning network buffers..."
+echo "[1/9] Tuning network buffers..."
 sysctl -w net.core.rmem_max=16777216 2>/dev/null || echo "  ⚠ Cannot set rmem_max (needs --privileged)"
 sysctl -w net.core.wmem_max=16777216 2>/dev/null || true
 sysctl -w net.core.rmem_default=262144 2>/dev/null || true
@@ -57,7 +57,7 @@ sysctl -w net.ipv4.tcp_keepalive_probes=6 2>/dev/null || true
 echo "✓ Network tuning applied"
 echo ""
 
-echo "[2/8] Configuring routes..."
+echo "[2/9] Configuring routes..."
 for pair in ${EXTRA_ROUTES}; do
     cidr="${pair%%:*}"
     gw="${pair##*:}"
@@ -77,75 +77,11 @@ ip route
 echo "✓ Network routing configured"
 echo ""
 
-# mountd and nfsd log through syslog; without it their diagnostics vanish.
-echo "[3/8] Starting syslog..."
-syslogd || busybox syslogd || echo "⚠ Could not start syslogd"
-sleep 1
-echo "✓ syslog started"
-echo ""
-
-echo "[4/8] Starting rpcbind..."
-rpcbind -w
-sleep 2
-echo "✓ rpcbind started"
-echo ""
-
-# mountd refuses an /etc/exports that is world-writable or not root-owned.
-# A bind-mounted file carries the HOST's ownership straight through, so this
-# check is what turns a silent no-mount into a legible error.
-if [ -f /etc/exports ]; then
-    perms=$(stat -c '%a' /etc/exports)
-    owner=$(stat -c '%U' /etc/exports)
-    if [ "$owner" != "root" ] || [ "$((0$perms & 022))" -ne 0 ]; then
-        echo "⚠ WARNING: /etc/exports is ${owner}:${perms} — mountd requires root-owned, non-world-writable."
-        echo "  Fix on the HOST: sudo chown root:root <file> && sudo chmod 644 <file>"
-    fi
-else
-    echo "⚠ WARNING: no /etc/exports — nothing will be exportable."
-fi
-
-echo "[5/8] Starting rpc.mountd..."
-/usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1
-sleep 2
-if pgrep -x rpc.mountd > /dev/null 2>&1; then
-    echo "✓ rpc.mountd started (PID: $(pgrep -x rpc.mountd))"
-else
-    echo "⚠ Warning: mountd may have exited, check logs"
-    cat /var/log/mountd-stdout.log 2>/dev/null || true
-fi
-echo ""
-
-echo "[6/8] Starting rpc.nfsd (NFSv2)..."
-/usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1
-sleep 2
-if pgrep -x rpc.nfsd > /dev/null 2>&1; then
-    echo "✓ rpc.nfsd started (PID: $(pgrep -x rpc.nfsd))"
-else
-    echo "⚠ Warning: nfsd may have exited, check /var/log/nfsd.log"
-    cat /var/log/nfsd.log 2>/dev/null || true
-fi
-echo ""
-
-echo "Registered RPC services:"
-rpcinfo -p localhost 2>/dev/null || echo "⚠ Could not query rpcbind"
-echo ""
-echo "Exports configuration:"
-cat /etc/exports 2>/dev/null || true
-echo ""
-
-echo "[7/8] Starting TFTP server (root: ${TFTP_ROOT})..."
-/usr/sbin/in.tftpd -l -s "${TFTP_ROOT}" -u root -c &
-sleep 1
-echo "✓ TFTP server started on port 69"
-echo ""
-
-echo "[8/8] Starting inetd (rsh/rexec) and NTP..."
-/usr/sbin/inetd
-ntpd -g -u ntp:ntp
-sleep 1
-echo "✓ inetd and NTP started"
-echo ""
-
+# Filesystem layout BEFORE any daemon starts. The symlink used to be baked
+# into the image, so it was always present; creating it at startup instead
+# means it has to exist before inetd accepts the first rcp, or a client that
+# connects during startup fails on a path that is about to appear.
+echo "[3/9] Preparing export filesystem..."
 if [ -d "${NFS_EXPORT_DIR}" ]; then
     echo "✓ Export path exists: ${NFS_EXPORT_DIR} ($(stat -c '%a' "${NFS_EXPORT_DIR}"))"
 else
@@ -179,7 +115,78 @@ for pair in ${EXPORT_SYMLINKS}; do
             || echo "  ⚠ Could not create symlink $link"
     fi
 done
+echo "✓ Export filesystem ready"
 echo ""
+
+# mountd and nfsd log through syslog; without it their diagnostics vanish.
+echo "[4/9] Starting syslog..."
+syslogd || busybox syslogd || echo "⚠ Could not start syslogd"
+sleep 1
+echo "✓ syslog started"
+echo ""
+
+echo "[5/9] Starting rpcbind..."
+rpcbind -w
+sleep 2
+echo "✓ rpcbind started"
+echo ""
+
+# mountd refuses an /etc/exports that is world-writable or not root-owned.
+# A bind-mounted file carries the HOST's ownership straight through, so this
+# check is what turns a silent no-mount into a legible error.
+if [ -f /etc/exports ]; then
+    perms=$(stat -c '%a' /etc/exports)
+    owner=$(stat -c '%U' /etc/exports)
+    if [ "$owner" != "root" ] || [ "$((0$perms & 022))" -ne 0 ]; then
+        echo "⚠ WARNING: /etc/exports is ${owner}:${perms} — mountd requires root-owned, non-world-writable."
+        echo "  Fix on the HOST: sudo chown root:root <file> && sudo chmod 644 <file>"
+    fi
+else
+    echo "⚠ WARNING: no /etc/exports — nothing will be exportable."
+fi
+
+echo "[6/9] Starting rpc.mountd..."
+/usr/sbin/rpc.mountd > /var/log/mountd-stdout.log 2>&1
+sleep 2
+if pgrep -x rpc.mountd > /dev/null 2>&1; then
+    echo "✓ rpc.mountd started (PID: $(pgrep -x rpc.mountd))"
+else
+    echo "⚠ Warning: mountd may have exited, check logs"
+    cat /var/log/mountd-stdout.log 2>/dev/null || true
+fi
+echo ""
+
+echo "[7/9] Starting rpc.nfsd (NFSv2)..."
+/usr/sbin/rpc.nfsd > /var/log/nfsd.log 2>&1
+sleep 2
+if pgrep -x rpc.nfsd > /dev/null 2>&1; then
+    echo "✓ rpc.nfsd started (PID: $(pgrep -x rpc.nfsd))"
+else
+    echo "⚠ Warning: nfsd may have exited, check /var/log/nfsd.log"
+    cat /var/log/nfsd.log 2>/dev/null || true
+fi
+echo ""
+
+echo "Registered RPC services:"
+rpcinfo -p localhost 2>/dev/null || echo "⚠ Could not query rpcbind"
+echo ""
+echo "Exports configuration:"
+cat /etc/exports 2>/dev/null || true
+echo ""
+
+echo "[8/9] Starting TFTP server (root: ${TFTP_ROOT})..."
+/usr/sbin/in.tftpd -l -s "${TFTP_ROOT}" -u root -c &
+sleep 1
+echo "✓ TFTP server started on port 69"
+echo ""
+
+echo "[9/9] Starting inetd (rsh/rexec) and NTP..."
+/usr/sbin/inetd
+ntpd -g -u ntp:ntp
+sleep 1
+echo "✓ inetd and NTP started"
+echo ""
+
 
 echo "=========================================="
 echo "NFSv2 + TFTP Ready — ${VARIANT_LABEL}"

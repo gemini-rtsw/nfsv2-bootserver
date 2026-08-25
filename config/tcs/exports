@@ -3,3 +3,7 @@
 # nfs-user-server wants ONE line per export path with all clients on it.
 # Splitting a path across several lines makes the later lines ineffective.
 /gem_sw 10.1.2.177(rw,no_root_squash) 10.2.2.104(rw,no_root_squash)
+
+# /gemini is a second export root, not part of /gem_sw: RPM-installed GEM8.6
+# instrument software (gmoscc et al) lands at /gemini/GEM8.6/... on the host.
+/gemini 10.1.2.177(rw,no_root_squash) 10.2.2.104(rw,no_root_squash)

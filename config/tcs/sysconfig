@@ -21,3 +21,16 @@ NETWORK_NAME=nfs-ipvlan
 NETWORK_SUBNET=10.2.2.0/24
 NETWORK_GATEWAY=10.2.2.1
 PARENT_INTERFACE=ens33
+
+# gmoscc (and the other GEM8.6 instrument packages) install to /gemini on the
+# HOST, which is outside the /gem_sw export, so clients would not see them.
+# Mount it in and export it as a second path.
+#
+# Raw docker arguments, split on whitespace by systemd. No quotes, no spaces
+# in paths.
+EXTRA_DOCKER_ARGS=-v /gemini:/gemini:rw
+
+# Created 0777 at start, matching /gem_sw. Without this docker would create the
+# bind source itself as root:root 0755 whenever the unit starts before gmoscc
+# is installed.
+EXTRA_EXPORT_DIRS=/gemini
