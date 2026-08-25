@@ -34,6 +34,24 @@ configuration beyond the export directories, which the systemd unit creates.
 > If you inherited an `ens33-promisc.service` from the old instructions it is
 > harmless, but it is not doing anything for the container and can be removed.
 
+**Why the instruction was there, and why not to retry macvlan.** This server
+was first built with **macvlan**, which genuinely does need promiscuous mode —
+hence the original step. It did not work, the network was switched to ipvlan,
+and the promiscuous-mode instructions were left behind.
+
+On VMware, macvlan needs more than the guest NIC in promiscuous mode. The
+vSwitch portgroup must also accept **Forged Transmits** and **MAC Address
+Changes**, because each macvlan container presents a MAC the vSwitch has not
+issued. Those are vCenter-level policies, often owned by ITOps rather than by
+whoever administers the VM, and left at their secure defaults a macvlan
+container comes up, claims its IP, and is simply unreachable — exactly the
+symptom seen here.
+
+ipvlan has none of these requirements: it shares the parent's MAC and
+demultiplexes by IP, so the vSwitch sees only traffic for a MAC it already
+knows. That is why this deployment uses `-d ipvlan`, and why switching back to
+macvlan to "fix" a networking problem will reintroduce one instead.
+
 ### 2. Enable host rpcbind and NFS services
 
 ```bash
