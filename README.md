@@ -22,6 +22,21 @@ from a checked-in tarball rather than a package.
 | seeded subtree | — | `/export/gemini/altair/V3-7gate` |
 | RPM | `nfsv2-bootserver-tcs` | `nfsv2-bootserver-altair` |
 
+### How TCS clients reach `/gemini`
+
+`/gemini` is a **separate export**, not part of `/gem_sw`. The three protocols
+reach it differently:
+
+| protocol | path | works because |
+|---|---|---|
+| TFTP | `/gemini/GEM8.6/...` | TCS sets `TFTP_ROOT=/`, so absolute paths resolve |
+| rsh/rcp | `/gemini/...` | `in.rshd` does not chroot; the bind mount is just there |
+| NFS | `nfsMount(ip, "/gemini", ...)` | **a second mount** — it does not appear under `/gem_sw` |
+
+That second NFS mount is the one thing to remember: a client that mounts only
+`/gem_sw` will not see the GEM8.6 tree, and the failure looks like missing
+files rather than a missing mount.
+
 **The two hosts reach `/gemini` differently, and the approaches are not
 interchangeable.** TCS exports `/gem_sw`, which has no `gemini` subtree, so it
 bind-mounts the host's `/gemini` in and exports it as a second path. Altair
