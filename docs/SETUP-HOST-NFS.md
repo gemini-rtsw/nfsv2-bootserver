@@ -1,43 +1,38 @@
 # Setting Up Host Kernel NFS for NFSv3/4
 
-Now that the NFSv2 container uses ipvlan networking on `10.2.2.147`, you can enable kernel NFS on the host (`10.2.2.148`) for modern NFSv3/4 clients.
+Now that the NFSv2 container uses ipvlan networking on `10.2.2.147`, you can
+enable kernel NFS on the host (`10.2.2.148`) for modern NFSv3/4 clients.
+
+Everything below is **optional**: it is only needed if this host must also
+serve NFSv3/4 to modern clients. The NFSv2 boot server itself needs no host
+configuration beyond the export directories, which the systemd unit creates.
 
 ## Setup Steps
 
-### 1. Enable Promiscuous Mode (Required for IPVLAN)
+### 1. Promiscuous mode — NOT required
 
-IPVLAN requires the parent network interface to be in promiscuous mode:
-
-```bash
-# Enable promiscuous mode on the parent interface
-sudo ip link set ens33 promisc on
-
-# Verify it's enabled (should see PROMISC in the flags)
-ip link show ens33
-```
-
-To make this persistent across reboots:
-
-```bash
-# Create a systemd service
-sudo tee /etc/systemd/system/ens33-promisc.service > /dev/null <<EOF
-[Unit]
-Description=Enable promiscuous mode on ens33
-After=network.target
-
-[Service]
-Type=oneshot
-ExecStart=/usr/sbin/ip link set ens33 promisc on
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Enable the service
-sudo systemctl daemon-reload
-sudo systemctl enable ens33-promisc.service
-```
+> **Correction (Aug 2026).** An earlier version of this document said ipvlan
+> requires promiscuous mode on the parent interface and shipped an
+> `ens33-promisc.service` to make it persistent. That is wrong, and following
+> it changes the host for no reason.
+>
+> **macvlan** gives each container its own MAC address, so the parent NIC has
+> to accept frames for MACs that are not its own — that needs promiscuous
+> mode, and on VMware also needs it allowed on the vSwitch portgroup.
+> **ipvlan** shares the parent's MAC and demultiplexes by IP, so no
+> promiscuous mode and no hypervisor change is needed. Avoiding that is a good
+> reason to prefer ipvlan here.
+>
+> Confirmed on `mkotcsboot-lv1`, which has served RTEMS clients for nine
+> months with no `PROMISC` flag on `ens33` and no such unit installed:
+>
+> ```
+> $ ip link show ens33 | grep -o PROMISC     # no output
+> $ systemctl is-enabled ens33-promisc.service   # not installed
+> ```
+>
+> If you inherited an `ens33-promisc.service` from the old instructions it is
+> harmless, but it is not doing anything for the container and can be removed.
 
 ### 2. Enable host rpcbind and NFS services
 
