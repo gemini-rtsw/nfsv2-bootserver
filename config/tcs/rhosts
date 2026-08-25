@@ -5,4 +5,12 @@
 # GMOS VME crate (gmoscc). Boot flags 0x8 with a blank ftp password mean
 # VxWorks pulls the kernel image over rsh, so this entry is what makes the
 # boot work at all -- not just an interactive convenience.
+# rshd resolves the peer address and matches ruserok() against the RESOLVED
+# name, so an IP literal alone is not enough when a PTR record exists -- and
+# 10.2.2.121 has one. All three forms are listed because which one matches
+# depends on whether the resolver returns the FQDN or the short name, and a
+# mismatch here means the crate cannot fetch its kernel over rsh (boot flags
+# 0x8, blank ftp password) and fails to boot with no clue why.
 10.2.2.121 gemvx
+mkogmoscc-ap1.hi.gemini.edu gemvx
+mkogmoscc-ap1 gemvx
