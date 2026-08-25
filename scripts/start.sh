@@ -19,6 +19,14 @@ VARIANT_LABEL="${VARIANT_LABEL:-generic}"
 # Space-separated CIDR:GATEWAY pairs. NOTE: docker --env-file does not strip
 # quotes, so this value must be unquoted in the sysconfig file.
 EXTRA_ROUTES="${EXTRA_ROUTES:-}"
+# Space-separated LINK:TARGET pairs, created inside the container at startup.
+# Altair needs /gemini -> /export/gemini: clients rcp/rsh in as gemvx and refer
+# to /gemini by absolute path. The link cannot live in the image because its
+# target is the bind-mounted export, which does not exist at build time.
+EXPORT_SYMLINKS="${EXPORT_SYMLINKS:-}"
+# Space-separated directories to create (mode 0777) under the export before
+# clients arrive. Altair seeds /export/gemini/altair/V3-7gate this way.
+SEED_DIRS="${SEED_DIRS:-}"
 
 # Guarantee the log files exist so the final `tail -f` cannot fail and take
 # PID 1 down with it.
@@ -141,6 +149,32 @@ else
     mkdir -p "${NFS_EXPORT_DIR}"
     chmod 777 "${NFS_EXPORT_DIR}"
 fi
+
+for d in ${SEED_DIRS}; do
+    if [ -d "$d" ]; then
+        echo "  seed dir present: $d ($(stat -c '%a' "$d"))"
+    else
+        echo "  creating seed dir: $d"
+        mkdir -p "$d" && chmod -R 777 "$d" || echo "  ⚠ Could not create $d"
+    fi
+done
+
+for pair in ${EXPORT_SYMLINKS}; do
+    link="${pair%%:*}"
+    target="${pair##*:}"
+    if [ -z "$link" ] || [ -z "$target" ] || [ "$link" = "$target" ]; then
+        echo "  ⚠ Skipping malformed symlink entry: ${pair}"
+        continue
+    fi
+    # -e is false for a dangling link, so test -L too or a stale link is remade
+    # every start and ln fails noisily.
+    if [ -e "$link" ] || [ -L "$link" ]; then
+        echo "  symlink present: $link -> $(readlink -f "$link" 2>/dev/null || echo '?')"
+    else
+        ln -s "$target" "$link" && echo "  symlink created: $link -> $target" \
+            || echo "  ⚠ Could not create symlink $link"
+    fi
+done
 echo ""
 
 echo "=========================================="

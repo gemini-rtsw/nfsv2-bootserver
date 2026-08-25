@@ -18,7 +18,15 @@ from a checked-in tarball rather than a package.
 | NFS export | `/gem_sw` | `/export` |
 | TFTP root | `/` (bootloader sends absolute paths) | `/export` |
 | container IP | 10.2.2.145 | 10.2.2.147 |
+| `/gemini` symlink | — | `→ /export/gemini` |
+| seeded subtree | — | `/export/gemini/altair/V3-7gate` |
 | RPM | `nfsv2-bootserver-tcs` | `nfsv2-bootserver-altair` |
+
+The `/gemini` symlink is not cosmetic: Altair clients `rsh`/`rcp` in as `gemvx`
+and address `/gemini` by absolute path. It is created at startup rather than
+baked into the image because its target is the bind-mounted export, which does
+not exist at build time. Both it and the seeded subtree come from
+`EXPORT_SYMLINKS` and `SEED_DIRS` in the Altair sysconfig; TCS sets neither.
 
 **The image is generic — it contains no site configuration.** Export paths,
 client lists, routes and the container IP all come from the variant's RPM at

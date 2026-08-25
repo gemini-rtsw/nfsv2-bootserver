@@ -16,3 +16,11 @@ NETWORK_NAME=nfs-ipvlan
 NETWORK_SUBNET=10.2.2.0/24
 NETWORK_GATEWAY=10.2.2.1
 PARENT_INTERFACE=ens33
+
+# Altair-only. Clients rsh/rcp in as gemvx and address /gemini absolutely, so
+# the container needs that link; its target is the bind-mounted export, so it
+# is made at startup rather than baked into the image.
+EXPORT_SYMLINKS=/gemini:/export/gemini
+
+# Seeded so the tree exists with the right mode before any client mounts.
+SEED_DIRS=/export/gemini/altair/V3-7gate
