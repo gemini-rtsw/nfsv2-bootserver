@@ -38,6 +38,10 @@ echo "Variant: ${VARIANT_LABEL}"
 echo "=========================================="
 echo ""
 
+# nfsd/mountd hold a descriptor per client connection; the bullseye default of
+# 1024 is low for a crate-boot storm. The running TCS server has always set it.
+ulimit -n 65536 || echo "  ⚠ Could not raise file descriptor limit"
+
 echo "[1/8] Tuning network buffers..."
 sysctl -w net.core.rmem_max=16777216 2>/dev/null || echo "  ⚠ Cannot set rmem_max (needs --privileged)"
 sysctl -w net.core.wmem_max=16777216 2>/dev/null || true

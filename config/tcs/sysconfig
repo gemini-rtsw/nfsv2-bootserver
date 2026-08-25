@@ -11,8 +11,10 @@ TFTP_ROOT=/
 
 VARIANT_LABEL=TCS / RTEMS VME
 
-# CIDR:GATEWAY pairs, space separated.
-EXTRA_ROUTES=10.2.49.0/24:10.2.2.234 10.1.2.0/24:10.2.2.1
+# CIDR:GATEWAY pairs, space separated. 'default' is just another route.
+# ipvlan gives the container no default route of its own, so it must be set
+# here or off-subnet clients cannot be replied to.
+EXTRA_ROUTES=default:10.2.2.1 10.2.49.0/24:10.2.2.234 10.1.2.0/24:10.2.2.1
 
 CONTAINER_IP=10.2.2.145
 NETWORK_NAME=nfs-ipvlan
