@@ -22,6 +22,16 @@ from a checked-in tarball rather than a package.
 | seeded subtree | — | `/export/gemini/altair/V3-7gate` |
 | RPM | `nfsv2-bootserver-tcs` | `nfsv2-bootserver-altair` |
 
+**The two hosts reach `/gemini` differently, and the approaches are not
+interchangeable.** TCS exports `/gem_sw`, which has no `gemini` subtree, so it
+bind-mounts the host's `/gemini` in and exports it as a second path. Altair
+exports `/export`, which already *contains* `gemini/`, reached through the
+container symlink. Adding a `/gemini` bind mount on Altair would shadow that
+symlink and show clients an empty tree; if a GEM8.6 package has to be
+installed on the Altair host, make the host's `/gemini` a symlink to
+`/export/gemini` instead. The entrypoint warns if it finds a non-symlink where
+a symlink was configured.
+
 The `/gemini` symlink is not cosmetic: Altair clients `rsh`/`rcp` in as `gemvx`
 and address `/gemini` by absolute path. It is created at startup rather than
 baked into the image because its target is the bind-mounted export, which does

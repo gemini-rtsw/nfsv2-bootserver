@@ -108,8 +108,16 @@ for pair in ${EXPORT_SYMLINKS}; do
     fi
     # -e is false for a dangling link, so test -L too or a stale link is remade
     # every start and ln fails noisily.
-    if [ -e "$link" ] || [ -L "$link" ]; then
-        echo "  symlink present: $link -> $(readlink -f "$link" 2>/dev/null || echo '?')"
+    if [ -L "$link" ]; then
+        echo "  symlink present: $link -> $(readlink "$link")"
+    elif [ -e "$link" ]; then
+        # Something real is already at that path -- almost always a bind mount
+        # shadowing the link. Clients then see that instead of the intended
+        # target, which looks like missing data rather than a config mistake,
+        # so say so plainly rather than reporting it as present.
+        echo "  ⚠ WARNING: $link exists and is NOT a symlink (expected -> $target)."
+        echo "    Clients will see this path's contents, not ${target}."
+        echo "    If it is a bind mount, remove it from EXTRA_DOCKER_ARGS."
     else
         ln -s "$target" "$link" && echo "  symlink created: $link -> $target" \
             || echo "  ⚠ Could not create symlink $link"

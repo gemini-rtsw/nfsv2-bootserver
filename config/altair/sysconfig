@@ -26,3 +26,10 @@ EXPORT_SYMLINKS=/gemini:/export/gemini
 
 # Seeded so the tree exists with the right mode before any client mounts.
 SEED_DIRS=/export/gemini/altair/V3-7gate
+
+# Do NOT add a /gemini bind mount here the way the TCS variant does. Altair
+# exports /export, which already contains gemini/, and EXPORT_SYMLINKS above
+# points /gemini at it. A bind mount would shadow that symlink and show
+# clients an empty tree instead. If a GEM8.6 package must be installed on this
+# host, make the HOST's /gemini a symlink to /export/gemini so the RPM lands
+# inside the exported tree.
