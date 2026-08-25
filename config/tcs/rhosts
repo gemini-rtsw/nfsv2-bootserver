@@ -2,3 +2,7 @@
 10.1.2.177 gemvx
 # RTEMS VME Client 2
 10.2.2.104 gemvx
+# GMOS VME crate (gmoscc). Boot flags 0x8 with a blank ftp password mean
+# VxWorks pulls the kernel image over rsh, so this entry is what makes the
+# boot work at all -- not just an interactive convenience.
+10.2.2.121 gemvx
