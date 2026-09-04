@@ -6,4 +6,13 @@
 
 # /gemini is a second export root, not part of /gem_sw: RPM-installed GEM8.6
 # instrument software (gmoscc et al) lands at /gemini/GEM8.6/... on the host.
-/gemini 10.1.2.177(rw,no_root_squash) 10.2.2.104(rw,no_root_squash) 10.2.2.121(rw,no_root_squash)
+/gemini 10.1.2.177(rw,no_root_squash) 10.2.2.104(rw,no_root_squash) 10.2.2.121(rw,no_root_squash) 10.2.2.110(rw,no_root_squash)
+
+# /gemdata is a third export root, for the hrwfs crate only (10.2.2.110).
+# detControl.h defines DET_CONTROL_DATA_FILE_PATH "/gemdata/ioc_data", so the
+# detector writes here and the mount is not optional -- hrwfs's startup does
+#   nfsMount "mkotcsbootv2-lv1", "/gemdata", "/gemdata"
+# and the IOC fails to store data without it. pisces-control exported this as
+# /export/gemdata; on this server it is /gemdata, as with /gemini.
+# No other client needs it: GMOS and the RTEMS clients do not use /gemdata.
+/gemdata 10.2.2.110(rw,no_root_squash)

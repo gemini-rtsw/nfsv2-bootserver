@@ -14,3 +14,11 @@
 10.2.2.121 gemvx
 mkogmoscc-ap1.hi.gemini.edu gemvx
 mkogmoscc-ap1 gemvx
+
+# HRWFS VME crate (hrwfs). Same reasoning as the GMOS entry above: boot flags
+# 0x8 with a blank ftp password mean the kernel comes over rsh, and 10.2.2.110
+# has a PTR record (mkohrwfs-ap1.hi.gemini.edu), so the IP literal alone is
+# not sufficient for ruserok().
+10.2.2.110 gemvx
+mkohrwfs-ap1.hi.gemini.edu gemvx
+mkohrwfs-ap1 gemvx
