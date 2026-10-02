@@ -22,3 +22,13 @@ mkogmoscc-ap1 gemvx
 10.2.2.110 gemvx
 mkohrwfs-ap1.hi.gemini.edu gemvx
 mkohrwfs-ap1 gemvx
+
+# PWFS VME crates (the unified pwfs application; one crate per probe). Same
+# reasoning again: flags 0x8, kernel over rsh, and both addresses have PTR
+# records, so the names are needed alongside the IP literals.
+10.2.2.111 gemvx
+mkopwfs1-ap1.hi.gemini.edu gemvx
+mkopwfs1-ap1 gemvx
+10.2.2.112 gemvx
+mkopwfs2-ap1.hi.gemini.edu gemvx
+mkopwfs2-ap1 gemvx
