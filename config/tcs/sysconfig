@@ -26,7 +26,7 @@ PARENT_INTERFACE=ens33
 # HOST, which is outside the /gem_sw export, so clients would not see them.
 # Mount it in and export it as a second path.
 #
-# /gemdata is the same arrangement for the hrwfs crate's detector data
+# /gemdata is the same arrangement for the hrwfs and pwfs crates' detector data
 # (DET_CONTROL_DATA_FILE_PATH "/gemdata/ioc_data"); see config/tcs/exports.
 #
 # Raw docker arguments, split on whitespace by systemd. No quotes, no spaces
