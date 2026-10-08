@@ -32,3 +32,12 @@ mkopwfs1-ap1 gemvx
 10.2.2.112 gemvx
 mkopwfs2-ap1.hi.gemini.edu gemvx
 mkopwfs2-ap1 gemvx
+
+# GNIRS CC crate (gnirscc). Same reasoning as the GMOS entry above: boot flags
+# 0x8 with a blank ftp password mean the kernel AND its vxWorks.sym come over
+# rsh, and 10.2.2.87 has a PTR record (mkognirscc-ap1.hi.gemini.edu), so the IP
+# literal alone is not sufficient for ruserok(). It does NOT need /gemdata:
+# nothing in gnirscc or the IS uses it.
+10.2.2.87 gemvx
+mkognirscc-ap1.hi.gemini.edu gemvx
+mkognirscc-ap1 gemvx

@@ -6,7 +6,11 @@
 
 # /gemini is a second export root, not part of /gem_sw: RPM-installed GEM8.6
 # instrument software (gmoscc et al) lands at /gemini/GEM8.6/... on the host.
-/gemini 10.1.2.177(rw,no_root_squash) 10.2.2.104(rw,no_root_squash) 10.2.2.121(rw,no_root_squash) 10.2.2.110(rw,no_root_squash) 10.2.2.111(rw,no_root_squash) 10.2.2.112(rw,no_root_squash)
+# 10.2.2.87 is the GNIRS CC crate (gnirscc, GEM5 / vxWorks 5.2): it boots
+# /gemini/external/GEM5/base/bin/mv167/vxWorks and runs
+# /gemini/GEM5/gnirs/CC/CC/bin/mv167/startup.IS, which also loads the
+# Instrument Sequencer from /gemini/GEM5/gnirs/IS/IS.
+/gemini 10.1.2.177(rw,no_root_squash) 10.2.2.104(rw,no_root_squash) 10.2.2.121(rw,no_root_squash) 10.2.2.110(rw,no_root_squash) 10.2.2.111(rw,no_root_squash) 10.2.2.112(rw,no_root_squash) 10.2.2.87(rw,no_root_squash)
 
 # /gemdata is a third export root, for the wavefront-sensor crates: hrwfs
 # (10.2.2.110) and the two PWFS crates (10.2.2.111, 10.2.2.112).
