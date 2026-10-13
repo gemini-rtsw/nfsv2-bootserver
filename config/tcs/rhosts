@@ -32,3 +32,9 @@ mkopwfs1-ap1 gemvx
 10.2.2.112 gemvx
 mkopwfs2-ap1.hi.gemini.edu gemvx
 mkopwfs2-ap1 gemvx
+
+# GMOS OIWFS VME crate (oiwfs). Same reasoning: flags 0x8, kernel over rsh,
+# and the address has a PTR record.
+10.2.2.113 gemvx
+mkooiwfs-ap1.hi.gemini.edu gemvx
+mkooiwfs-ap1 gemvx
