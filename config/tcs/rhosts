@@ -38,3 +38,13 @@ mkopwfs2-ap1 gemvx
 10.2.2.113 gemvx
 mkooiwfs-ap1.hi.gemini.edu gemvx
 mkooiwfs-ap1 gemvx
+
+# GNIRS detector-controller VME crates: DC1 (ngnirsdc1, MVME2700) and DC2
+# (ngnirsdc2, MVME162). Same reasoning as above: flags 0x8, kernel over rsh,
+# and both addresses have PTR records (mkognirsdc1-ap1, mkognirsdc2-ap1).
+10.2.2.83 gemvx
+mkognirsdc1-ap1.hi.gemini.edu gemvx
+mkognirsdc1-ap1 gemvx
+10.2.2.84 gemvx
+mkognirsdc2-ap1.hi.gemini.edu gemvx
+mkognirsdc2-ap1 gemvx
