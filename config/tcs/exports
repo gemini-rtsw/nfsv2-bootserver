@@ -25,12 +25,12 @@
 # No other client needs it: GMOS and the RTEMS clients do not use /gemdata.
 /gemdata 10.2.2.110(rw,no_root_squash) 10.2.2.111(rw,no_root_squash) 10.2.2.112(rw,no_root_squash) 10.2.2.113(rw,no_root_squash) 10.2.2.83(rw,no_root_squash) 10.2.2.84(rw,no_root_squash)
 
-# /gem_prod is a fourth export root, for the SCS crate (scs_mk, RTEMS 6.2,
-# MVME2700, 10.2.2.107). PPCBug TFTPs /gem_prod/epics/ioc/scs_mk/scs.boot and
-# passes /gem_prod/epics/ioc/scs_mk/stscs as the startup script; the EPICS RTEMS
-# init then NFS-mounts <server>:/gem_prod and runs it with relative dbd/ and db/
-# paths. These are the paths mkortnfs-lv1 (10.2.71.30) served. On this host the
-# scs_mk RPM installs to /gem_base/epics/ioc/scs_mk, bind-mounted read-only at
-# /gem_prod/epics/ioc/scs_mk (sysconfig). The SCS writes nothing here; its config
-# comes from 10.2.71.11:/gem_sw/etc/rtconfig, which this change does not move.
-/gem_prod 10.2.2.107(ro,no_root_squash)
+# /gem_base is a fourth export root, for the SCS crate (scs_mk, RTEMS 6.2,
+# MVME2700, 10.2.2.107). PPCBug TFTPs /gem_base/epics/ioc/scs_mk/scs.boot and
+# passes /gem_base/epics/ioc/scs_mk/stscs as the startup script; the EPICS RTEMS
+# init then NFS-mounts <server>:/gem_base and runs it with relative dbd/ and db/
+# paths. /gem_base/epics/ioc/scs_mk is where the scs_mk RPM installs on this
+# host, bind-mounted read-only into the container at the same path (sysconfig).
+# The SCS writes nothing here; its config comes from
+# 10.2.71.11:/gem_sw/etc/rtconfig, which this change does not move.
+/gem_base 10.2.2.107(ro,no_root_squash)
