@@ -66,6 +66,33 @@ pipeline installs every subpackage it builds into a single dev image, which a
 `Conflicts:` breaks. Installing both starts nothing; only the unit you
 `systemctl enable` runs.
 
+## You must restart the service yourself
+
+**Nothing restarts the boot server for you.** Installing or upgrading the RPM,
+and editing `/etc/nfsv2-bootserver/<variant>/*` or
+`/etc/sysconfig/nfsv2-bootserver-<variant>`, only changes files on disk. The
+running container keeps the old exports, settings and image until:
+
+```bash
+sudo systemctl restart nfsv2-bootserver-tcs
+```
+
+This is deliberate: the RPM's `%postun` uses `%systemd_postun`, not
+`_with_restart`, because a restart in the middle of a crate's boot breaks that
+boot. So:
+
+- **Schedule the restart.** It interrupts NFS, TFTP and rsh for *every* crate
+  on the server, not just the one you changed. Do it when no crate is booting
+  and the instruments using the server are idle.
+- **After an upgrade, pull the new image first** (see "Deploying"), or the
+  restart takes the server down.
+- **Check it came back**: `docker ps --filter name=nfsv2` shows the container
+  `Up` and staying up, and `showmount -e <container IP>` from another host
+  lists the exports you expect.
+- IOC packages that only install files (gmoscc, gnirscc, pwfs, scs_mk, ...)
+  need no boot-server restart: the crate reads the new files at its next boot.
+  A restart is needed only when this package or its config changes.
+
 ## Adding or changing a client
 
 No rebuild. Edit the config on the host and restart:
@@ -78,6 +105,18 @@ sudo systemctl restart nfsv2-bootserver-tcs
 
 Both files are `%config(noreplace)`, so hand edits survive `dnf upgrade`. Push
 the same edit to this repo so a fresh install starts from the right list.
+
+Where sudo doesn't cover an editor (mkotcsboot-lv1's `software` sudo is only
+dnf/yum/rpm/systemctl/journalctl), make the change here instead: PR, merge,
+install the new build by full NVR, pull its image, restart. Check
+`rpm -V nfsv2-bootserver-tcs` first: if the host copies were hand-edited, the
+RPM writes `.rpmnew` files and you merge them yourself.
+
+A crate whose IOC installs outside `/gemini` needs its directory bind-mounted
+into the container (`EXTRA_DOCKER_ARGS` in the sysconfig) and its own export
+line. Example: the SCS boots from `/gem_base/epics/ioc/scs_mk`, bound
+read-only and exported to 10.2.2.107 only (`cd819b2`). Don't add such a path
+to `EXTRA_EXPORT_DIRS`: the unit chmods those 0777 on the host.
 
 > **One export path per line.** `nfs-user-server` takes the *first* line for a
 > given path and ignores later ones, so a second `/gem_sw ...` line silently
@@ -106,17 +145,42 @@ journalctl -u nfsv2-bootserver-tcs -f      # the entrypoint's startup report
 ```
 
 Upgrades move the host to a new image, because the unit carries the version tag
-and is deliberately not a config file:
+and is deliberately not a config file. Do them in this order:
 
 ```bash
-sudo dnf upgrade nfsv2-bootserver-tcs
+# 1. Install the exact build -- never a bare `dnf upgrade` (see below)
+sudo dnf --refresh install nfsv2-bootserver-tcs-<full NVR>
+rpm -q nfsv2-bootserver-tcs
+
+# 2. Pull the image the new unit pins, BEFORE restarting
+IMG=$(sed -n 's/^Environment=IMAGE=//p' /usr/lib/systemd/system/nfsv2-bootserver-tcs.service)
+docker pull "$IMG"                         # as a docker-group user with a GHCR login
+
+# 3. Restart while no crate is booting (see "You must restart the service yourself")
 sudo systemctl restart nfsv2-bootserver-tcs
-rpm -q nfsv2-bootserver-tcs                # what is actually deployed
+docker ps --filter name=nfsv2 --format '{{.Names}} {{.Status}}'   # nfsv2-tcs Up ...
 ```
 
-`dnf downgrade` is a real rollback: the older RPM's unit pins the older image.
+Then check the exports from another host on the crates' network (the host
+can't reach its own ipvlan container, and `showmount -e <host name>` shows the
+host's own NFS, not the container's):
 
-### Root must be logged in to GHCR
+```bash
+showmount -e 10.2.2.145                    # TCS container IP
+```
+
+**Install by full NVR, never `dnf upgrade`.** Releases are `1.git<hash>`, and
+RPM compares the hash as text, not by date. On 2026-11-18 `dnf upgrade` on
+mkotcsboot-lv1 picked an August build (`efa0b91`) over the current ones
+because `e` sorts after `5` and `c`; that build lacked four crates' exports.
+`install <full NVR>` works in either direction; `dnf downgrade` refuses when
+the target happens to sort higher.
+
+Rollback: `sudo dnf install nfsv2-bootserver-tcs-<previous full NVR>` and
+restart. The older RPM's unit pins the older image, which is still in the
+local store, so no pull is needed.
+
+### The image must be local before the restart
 
 The unit runs `docker pull` as **root**, not as you. The `gemini-rtsw` org
 disables both Public and Internal package visibility, so this package is
@@ -128,8 +192,22 @@ echo "<PAT>" | sudo -H docker login ghcr.io -u <user> --password-stdin
 ```
 
 `-H` forces `HOME=/root`. Without it sudo may keep your `HOME`, report success,
-and the unit still fails. (`su -` first is equivalent.) The PAT needs
-`read:packages`.
+and the unit still fails. (`su -` first is equivalent.) The PAT must be a
+**classic** token with `read:packages`; GHCR refuses fine-grained tokens.
+
+**On mkotcsboot-lv1 root has no GHCR login** (as of 2026-11-18), and the team's
+sudo there doesn't allow `docker` as root. Instead, pull the pinned image as
+`software` (docker group, has a GHCR login) before restarting, as in
+"Deploying". Skipping that took the TCS boot server down for about three
+minutes on 2026-11-18: the journal showed
+
+```
+Error response from daemon: Head "https://ghcr.io/v2/gemini-rtsw/nfsv2-bootserver/manifests/1.0.0-gitcd819b2": unauthorized
+Unable to find image 'ghcr.io/gemini-rtsw/nfsv2-bootserver:1.0.0-gitcd819b2' locally
+```
+
+and the unit sat in `activating (auto-restart)`. Fix: `docker pull` as
+software, then restart again (or roll back by full NVR).
 
 A missing or expired credential is not fatal to a *running* server:
 `ExecStartPre=-/usr/bin/docker pull` has a leading `-`, so a failed pull is
@@ -140,8 +218,8 @@ new `<version>-git<hash>` tag that is not in the local image store, so
 intended behaviour: the alternative is a host quietly running something other
 than what `rpm -q` claims.
 
-Note that `dnf upgrade` alone does not restart the service (deliberately — see
-below), so between upgrade and restart `rpm -q` legitimately reports a newer
+Note that installing the RPM does not restart the service (deliberately — see
+"You must restart the service yourself"), so between upgrade and restart `rpm -q` legitimately reports a newer
 version than the running container. Confirm with:
 
 ```bash
